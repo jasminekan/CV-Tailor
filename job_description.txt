@@ -1,0 +1,58 @@
+About the job
+
+Company Description
+
+We’re Checkout.com. You might not know our name, but companies like eBay, Spotify, Klarna, Uber, and Sony do, because we’re behind many of the digital experiences you use every day.
+
+We are where the world checks out, enabling over 10 billion transactions yearly for more than one billion global shoppers.
+
+Whether you want to book a holiday, order food, renew a subscription, or check out online, there’s a good chance our technology powers the payments behind the scenes. Our platform helps the most ambitious businesses deliver effortless digital experiences at scale.
+
+If you want to do career-defining work, you’ve come to the right place. We move fast, think globally, and believe great teams are built by hiring exceptional people with conviction, curiosity, and the desire to make an impact.
+
+With 20 offices across six continents and London as our headquarters, we’re shaping the future of fintech and we’re just getting started.
+
+Global payments are complex and ever-evolving. At Checkout, our software engineers develop next-generation payments technologies that enable our merchants to boost acceptance rates, cut processing costs, fight fraud, and create cutting-edge technology that enables extraordinary customer experiences.
+
+We’re looking for software engineers who bring fresh ideas, have a curious nature, and are passionate about working in an engineering environment focused on building products that achieve the company’s strategic goals. You’ll work with teams across Checkout.com’s portfolio of products and services, all of which have a real customer-first philosophy.
+
+As a software engineer, you will lead and drive specific projects critical to Checkout’s needs, with opportunities to switch teams and projects as you and our fast-paced business grow and evolve. We need our engineers to be versatile, display exceptional leadership qualities, and be enthusiastic about taking on new problems across the full stack as we continue to push technology forward. With your technical expertise, you will lead project priorities, deadlines, and deliverables. You will design, develop, test, deploy, maintain, and enhance software solutions.
+
+What Are We Looking For
+
+- Bachelor’s or Master’s degree in Computer Science, Engineering, or a related field.
+- Proficiency in C# .NET, Java, or Go, with a strong understanding of software development principles in either a backend or full-stack environment.
+- Great communication skills and the ability to interact effectively with a wide range of stakeholders.
+- Experience working in agile environments and delivering high-quality code within tight deadlines.
+- Excellent problem-solving skills and the ability to work independently as well as part of a team.
+- Someone who is AI proficient or AI curious and hungry to embrace the latest technology to enhance individual and team productivity.
+- Payments or financial knowledge is a plus, but not a necessity.
+
+How You’ll Make An Impact
+
+- Be part of and collaborate with cross-functional teams, including product management, across a large engineering community.
+- Define and design loosely coupled, scalable systems within a wider microservices architecture using industry best practices.
+- Stay up to date with, use, and spread knowledge of the latest technologies used by Checkout.
+- Write clean, maintainable, extendable, and testable code on some of Checkout’s most impactful systems.
+- Build, own, and operate your systems to the highest levels of resilience and service.
+- Mentor junior team members and assist in their technical development.
+
+Additional Information
+
+Bring all of you to work.
+
+We create the conditions for high performers to thrive through real ownership, fewer blockers, and work that makes a difference from day one.
+
+Here, you’ll move fast, take on meaningful challenges, and be recognized for the impact you deliver. It’s a place where ambition meets opportunity, and where your growth is in your hands.
+
+We work as one team, and we back each other to succeed. Whatever your background or identity, if you’re ready to grow and make a difference, you’ll be right at home here.
+
+It’s important that we set you up for success and make our process as accessible as possible. Let us know in your application, or tell your recruiter directly, if you need anything to make your experience or working environment more comfortable.
+
+Life at Checkout.com
+
+We understand that work is just one part of your life. Our hybrid working model offers flexibility, with three days per week in the office to support collaboration and connection.
+
+Curious about what it’s like to be part of our team? Visit our careers page to learn more about our culture, open roles, and what drives us.
+
+For a closer look at daily life at Checkout.com, follow us on LinkedIn and Instagram.
