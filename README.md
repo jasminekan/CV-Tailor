@@ -1,6 +1,6 @@
 # CV Tailor
 
-CV Tailor is a lightweight FastAPI application that analyses a job description and extracts the key signals a candidate needs to match the role. The goal is to help a user understand the strongest requirements in a role and then tailor a CV around those signals.
+CV Tailor is a lightweight FastAPI application built around a manually maintained experience bank. The bank is the source of truth; job analysis and matching select the strongest evidence for a role without rewriting the user's underlying experience.
 
 ## v1 capabilities
 
@@ -17,6 +17,16 @@ This first version focuses on the core analysis workflow:
 - Serves a small frontend that lets a user paste a job description and view the analysis
 - Includes health-check and API smoke-test coverage for the FastAPI app
 
+## v2 capabilities
+
+- Maintains structured work experience, achievement bullets, skills, projects, education, certifications, and additional evidence
+- Persists the experience bank in a local versioned JSON file
+- Preserves the existing job-description analysis endpoint
+- Matches explicit experience-bank evidence against analyzed job requirements
+- Ranks relevant evidence and reports strong, related, and missing requirements
+
+The local JSON store is intended for a single-user development workflow. It is not a multi-user database, does not provide authentication or concurrent editing, and should be backed up manually. Matching results are computed per request and are not persisted.
+
 ## Project structure
 
 ```text
@@ -24,8 +34,11 @@ This first version focuses on the core analysis workflow:
 ├── app/
 │   ├── main.py
 │   ├── models.py
+│   ├── repositories/
+│   │   └── json_experience_bank.py
 │   └── services/
-│       └── llm.py
+│       ├── llm.py
+│       └── matching.py
 ├── static/
 │   ├── app.js
 │   ├── index.html
@@ -48,6 +61,8 @@ This first version focuses on the core analysis workflow:
 - OpenAI Python SDK
 - Static HTML/CSS/JavaScript frontend
 - pytest for automated tests
+
+No PDF/DOCX parsing or database dependency is required for V2. The experience bank is entered and maintained as structured data by the user.
 
 ## Setup
 
@@ -114,6 +129,30 @@ Example response:
 }
 ```
 
+### Experience bank
+
+Read the current local bank:
+
+```bash
+curl "http://127.0.0.1:8000/experience-bank"
+```
+
+Replace it with a validated structured bank using `PUT /experience-bank`. The storage path defaults to `data/experience_bank.json` and can be changed with `EXPERIENCE_BANK_PATH`.
+
+Run matching by sending the result of `/analyse` to `POST /match`:
+
+```json
+{
+  "job_analysis": {
+    "job_title": "Backend Engineer",
+    "technical_skills": ["Python", "FastAPI"],
+    "other_keywords": [],
+    "responsibilities": [],
+    "qualifications": []
+  }
+}
+```
+
 ## v1 feature summary
 
 Version 1 delivers the core CV tailoring workflow as a focused, usable MVP:
@@ -125,6 +164,6 @@ Version 1 delivers the core CV tailoring workflow as a focused, usable MVP:
 - API endpoint with validation and error handling
 - test coverage for app health, frontend serving, and LLM response handling
 
-## Notes
+## Roadmap
 
-This project is intentionally scoped as a v1 MVP. It focuses on extracting useful role information from job descriptions and exposing that in a structured, reusable format. Later versions can extend this into full CV tailoring workflows, matching, recommendations, and user-facing editing tools.
+V2 deliberately stops at evidence selection. Tailored one-page CV generation, user review of generated drafts, PDF/DOCX export, authentication, multi-user storage, PostgreSQL, cloud backups, and saved job history are candidates for V3/V4. A future CV generator should consume selected bank item IDs and produce a separate draft; it should never replace the experience bank.

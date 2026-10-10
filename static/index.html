@@ -3,64 +3,62 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CV Tailor | Job Description Analyser</title>
+  <title>CV Tailor | Experience Bank</title>
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/app.js" defer></script>
 </head>
 <body>
   <main class="page-shell">
     <section class="intro" aria-labelledby="page-title">
-      <p class="eyebrow">CV Tailor / v0.1</p>
-      <h1 id="page-title">Turn a job description into a useful brief.</h1>
-      <p class="intro-copy">Paste a role below and surface the language that matters for your next application.</p>
+      <p class="eyebrow">CV Tailor / v2</p>
+      <h1>Keep your evidence ready. Choose what matters for each role.</h1>
+      <p class="intro-copy">Build a private experience bank once, then use it to find the strongest evidence for every job.</p>
     </section>
 
-    <section class="workspace" aria-label="Job description analysis">
-      <form id="analyse-form" novalidate>
-        <div class="field-heading">
-          <label for="job-description">Job description</label>
-          <span id="character-count">0 characters</span>
+    <section class="workspace" aria-label="Experience bank and job matching">
+      <form id="bank-form" class="panel" novalidate>
+        <div class="results-heading">
+          <div><p class="eyebrow">Source of truth</p><h2>Experience bank</h2></div>
+          <button id="save-bank-button" type="submit">Save bank</button>
         </div>
-        <textarea
-          id="job-description"
-          name="job_description"
-          rows="14"
-          placeholder="Paste the full job description here..."
-          required
-        ></textarea>
+        <p id="bank-message" class="message" role="status"></p>
+        <label for="skills">Skills</label>
+        <input id="skills" type="text" placeholder="Python, FastAPI, SQL">
+
+        <div class="section-heading"><h3>Work experience</h3><button id="add-work" class="secondary-button" type="button">Add role</button></div>
+        <div id="work-list" class="editor-list"></div>
+        <div class="section-heading"><h3>Projects</h3><button id="add-project" class="secondary-button" type="button">Add project</button></div>
+        <div id="project-list" class="editor-list"></div>
+
+        <label for="education">Education <span class="field-hint">one item per line: qualification | institution | field | year</span></label>
+        <textarea id="education" rows="3" placeholder="BSc Computer Science | University | Computer Science | 2024"></textarea>
+        <label for="certifications">Certifications <span class="field-hint">one item per line: name | issuer | year | skills</span></label>
+        <textarea id="certifications" rows="3" placeholder="AWS Certified Cloud Practitioner | AWS | 2024 | AWS"></textarea>
+        <label for="additional-evidence">Additional evidence <span class="field-hint">one item per line</span></label>
+        <textarea id="additional-evidence" rows="3" placeholder="Mentored two junior developers"></textarea>
+      </form>
+
+      <form id="match-form" class="panel" novalidate>
+        <div class="results-heading"><div><p class="eyebrow">Job workspace</p><h2>Find your best evidence</h2></div></div>
+        <label for="job-description">Job description</label>
+        <textarea id="job-description" rows="12" placeholder="Paste the full job description here..." required></textarea>
         <p id="form-error" class="message error" role="alert" hidden></p>
-        <button id="analyse-button" type="submit">
-          <span id="button-label">Analyse job</span>
-          <span id="loading-label" hidden>Analysing...</span>
-        </button>
+        <button id="analyse-button" type="submit"><span id="button-label">Analyse and match</span><span id="loading-label" hidden>Working...</span></button>
       </form>
 
       <section id="results" class="results" aria-labelledby="results-title" hidden>
-        <div class="results-heading">
-          <p class="eyebrow">Analysis</p>
-          <h2 id="results-title">What this role is asking for</h2>
-        </div>
+        <div class="results-heading"><div><p class="eyebrow">Job analysis</p><h2 id="results-title">What this role is asking for</h2></div><p id="job-title" class="job-title"></p></div>
         <div class="result-grid">
-          <article class="result-card result-card-wide">
-            <h3>Job title</h3>
-            <p id="job-title" class="job-title"></p>
-          </article>
-          <article class="result-card">
-            <h3>Technical skills</h3>
-            <ul id="technical-skills"></ul>
-          </article>
-          <article class="result-card">
-            <h3>Other keywords</h3>
-            <ul id="other-keywords"></ul>
-          </article>
-          <article class="result-card">
-            <h3>Responsibilities</h3>
-            <ul id="responsibilities"></ul>
-          </article>
-          <article class="result-card">
-            <h3>Qualifications</h3>
-            <ul id="qualifications"></ul>
-          </article>
+          <article class="result-card"><h3>Technical skills</h3><ul id="technical-skills"></ul></article>
+          <article class="result-card"><h3>Other keywords</h3><ul id="other-keywords"></ul></article>
+          <article class="result-card"><h3>Responsibilities</h3><ul id="responsibilities"></ul></article>
+          <article class="result-card"><h3>Qualifications</h3><ul id="qualifications"></ul></article>
+        </div>
+        <div class="match-results">
+          <article class="result-card status-strong"><h3>Strong matches</h3><ul id="strong-matches"></ul></article>
+          <article class="result-card status-related"><h3>Related evidence</h3><ul id="related-matches"></ul></article>
+          <article class="result-card status-missing"><h3>Not found</h3><ul id="missing-requirements"></ul></article>
+          <article class="result-card result-card-wide"><h3>Most relevant evidence</h3><ol id="ranked-evidence"></ol></article>
         </div>
       </section>
     </section>
