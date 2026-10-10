@@ -8,16 +8,19 @@ const formError = document.querySelector("#form-error");
 const bankMessage = document.querySelector("#bank-message");
 const results = document.querySelector("#results");
 const MIN_DESCRIPTION_LENGTH = 20;
+let loadedBank = {};
 
 function addWorkExperience(work = {}) {
   const card = document.createElement("div");
   card.className = "editor-card work-entry";
+  card.original = work;
   card.innerHTML = `<button class="remove-button" type="button">Remove</button>
     <div class="input-grid"><input data-field="employer" placeholder="Employer" value="${work.employer || ""}" required><input data-field="role" placeholder="Role" value="${work.role || ""}" required><input data-field="start_date" placeholder="Start date" value="${work.start_date || ""}"><input data-field="end_date" placeholder="End date" value="${work.end_date || ""}"></div>
     <input data-field="skills" placeholder="Role skills, comma separated" value="${(work.skills || []).join(", ")}">
     <input data-field="technologies" placeholder="Technologies, comma separated" value="${(work.technologies || []).join(", ")}">
     <textarea data-field="summary" rows="2" placeholder="Role summary">${work.summary || ""}</textarea>
-    <textarea data-field="achievements" rows="3" placeholder="Achievements, one per line">${(work.achievements || []).map((item) => item.text).join("\n")}</textarea>`;
+    <div data-field="achievements"></div>`;
+  evidenceEditor(card.querySelector('[data-field="achievements"]'), work.achievements || []);
   card.querySelector(".remove-button").addEventListener("click", () => card.remove());
   document.querySelector("#work-list").append(card);
 }
@@ -25,12 +28,14 @@ function addWorkExperience(work = {}) {
 function addProject(project = {}) {
   const card = document.createElement("div");
   card.className = "editor-card project-entry";
+  card.original = project;
   card.innerHTML = `<button class="remove-button" type="button">Remove</button>
     <input data-field="name" placeholder="Project name" value="${project.name || ""}" required>
     <input data-field="skills" placeholder="Skills, comma separated" value="${(project.skills || []).join(", ")}">
     <input data-field="technologies" placeholder="Technologies, comma separated" value="${(project.technologies || []).join(", ")}">
     <textarea data-field="description" rows="2" placeholder="Project description">${project.description || ""}</textarea>
-    <textarea data-field="evidence" rows="3" placeholder="Your contributions, one per line">${(project.evidence || []).map((item) => item.text).join("\n")}</textarea>`;
+    <div data-field="evidence"></div>`;
+  evidenceEditor(card.querySelector('[data-field="evidence"]'), project.evidence || []);
   card.querySelector(".remove-button").addEventListener("click", () => card.remove());
   document.querySelector("#project-list").append(card);
 }
@@ -39,15 +44,69 @@ function splitValues(value) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
-function makeEvidence(text, skills = [], technologies = []) {
-  return { text: text.trim(), skills, technologies };
+// Keep each item's metadata attached to its row while editing or reordering.
+function evidenceEditor(container, items) {
+  container.replaceChildren();
+  const add = document.createElement("button");
+  add.type = "button";
+  add.textContent = "Add evidence";
+  const addRow = (item = {}) => {
+    const row = document.createElement("div");
+    row.className = "evidence-entry";
+    row.original = item;
+    const fields = [
+      ["text", "Achievement or evidence"],
+      ["skills", "This item's skills, comma separated"],
+      ["technologies", "This item's technologies, comma separated"],
+      ["outcomes", "Outcomes, one per line"],
+    ];
+    for (const [field, label] of fields) {
+      const input = document.createElement(field === "text" || field === "outcomes" ? "textarea" : "input");
+      input.dataset.field = field;
+      input.setAttribute("aria-label", label);
+      input.placeholder = label;
+      input.value = Array.isArray(item[field]) ? item[field].join(field === "outcomes" ? "\n" : ", ") : item[field] || "";
+      row.append(input);
+    }
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "Remove evidence";
+    remove.addEventListener("click", () => row.remove());
+    row.append(remove);
+    container.insertBefore(row, add);
+  };
+  container.append(add);
+  items.forEach(addRow);
+  add.addEventListener("click", () => addRow());
+}
+
+function readEvidence(container) {
+  return [...container.querySelectorAll(".evidence-entry")].map((row) => {
+    const value = (field) => row.querySelector(`[data-field="${field}"]`).value.trim();
+    return {
+      ...row.original,
+      text: value("text"),
+      skills: splitValues(value("skills")),
+      technologies: splitValues(value("technologies")),
+      outcomes: value("outcomes").split("\n").map((line) => line.trim()).filter(Boolean),
+    };
+  }).filter((item) => item.text);
 }
 
 function parseLines(id, fields) {
-  return document.querySelector(`#${id}`).value.split("\n").map((line) => {
+  const remaining = [...(loadedBank[id] || [])];
+  return document.querySelector(`#${id}`).value.split("\n").filter((line) => line.trim()).map((line) => {
     const values = line.split("|").map((value) => value.trim());
-    return Object.fromEntries(fields.map((field, index) => [field, field === "skills" ? splitValues(values[index] || "") : values[index] || null]));
-  }).filter((item) => item[fields[0]]);
+    const index = remaining.findIndex((item) => item[fields[0]] === values[0]);
+    const original = index >= 0 ? remaining.splice(index, 1)[0] : {};
+    const parsed = Object.fromEntries(fields.map((field, index) => [
+      field,
+      field === "skills"
+        ? splitValues(values[index] || "")
+        : values[index] || (field === "year" ? null : ""),
+    ]));
+    return { ...original, ...parsed };
+  });
 }
 
 function readBank() {
@@ -55,26 +114,52 @@ function readBank() {
     const value = (field) => card.querySelector(`[data-field="${field}"]`).value.trim();
     const skills = splitValues(value("skills"));
     const technologies = splitValues(value("technologies"));
-    return { employer: value("employer"), role: value("role"), start_date: value("start_date") || null, end_date: value("end_date") || null, summary: value("summary"), skills, technologies, achievements: value("achievements").split("\n").map((text) => makeEvidence(text, skills, technologies)).filter((item) => item.text) };
+    return {
+      ...card.original,
+      employer: value("employer"),
+      role: value("role"),
+      start_date: value("start_date") || null,
+      end_date: value("end_date") || null,
+      summary: value("summary"),
+      skills,
+      technologies,
+      achievements: readEvidence(card.querySelector('[data-field="achievements"]')),
+    };
   });
   const projects = [...document.querySelectorAll(".project-entry")].map((card) => {
     const value = (field) => card.querySelector(`[data-field="${field}"]`).value.trim();
     const skills = splitValues(value("skills"));
     const technologies = splitValues(value("technologies"));
-    return { name: value("name"), description: value("description"), skills, technologies, evidence: value("evidence").split("\n").map((text) => makeEvidence(text, skills, technologies)).filter((item) => item.text) };
+    return {
+      ...card.original,
+      name: value("name"),
+      description: value("description"),
+      skills,
+      technologies,
+      evidence: readEvidence(card.querySelector('[data-field="evidence"]')),
+    };
   });
-  return { skills: splitValues(document.querySelector("#skills").value), work_experience: workExperience, projects, education: parseLines("education", ["qualification", "institution", "field", "year"]), certifications: parseLines("certifications", ["name", "issuer", "year", "skills"]), additional_evidence: document.querySelector("#additional-evidence").value.split("\n").map((text) => makeEvidence(text)).filter((item) => item.text) };
+  return {
+    ...loadedBank,
+    skills: splitValues(document.querySelector("#skills").value),
+    work_experience: workExperience,
+    projects,
+    education: parseLines("education", ["qualification", "institution", "field", "year"]),
+    certifications: parseLines("certifications", ["name", "issuer", "year", "skills"]),
+    additional_evidence: readEvidence(document.querySelector("#additional-evidence-editor")),
+  };
 }
 
 function populateBank(bank) {
+  loadedBank = bank;
   document.querySelector("#skills").value = bank.skills.join(", ");
   document.querySelector("#work-list").replaceChildren();
   document.querySelector("#project-list").replaceChildren();
   bank.work_experience.forEach(addWorkExperience);
   bank.projects.forEach(addProject);
-  document.querySelector("#education").value = bank.education.map((item) => [item.qualification, item.institution, item.field, item.year].filter(Boolean).join(" | ")).join("\n");
-  document.querySelector("#certifications").value = bank.certifications.map((item) => [item.name, item.issuer, item.year, (item.skills || []).join(", ")].filter(Boolean).join(" | ")).join("\n");
-  document.querySelector("#additional-evidence").value = bank.additional_evidence.map((item) => item.text).join("\n");
+  document.querySelector("#education").value = bank.education.map((item) => [item.qualification, item.institution, item.field, item.year || ""].join(" | ")).join("\n");
+  document.querySelector("#certifications").value = bank.certifications.map((item) => [item.name, item.issuer, item.year || "", (item.skills || []).join(", ")].join(" | ")).join("\n");
+  evidenceEditor(document.querySelector("#additional-evidence-editor"), bank.additional_evidence);
 }
 
 async function request(url, options) {
@@ -120,9 +205,16 @@ bankForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   bankMessage.textContent = "Saving...";
   try {
-    await request("/experience-bank", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(readBank()) });
+    const saved = await request("/experience-bank", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(readBank()),
+    });
+    populateBank(saved);
     bankMessage.textContent = "Experience bank saved.";
-  } catch (error) { bankMessage.textContent = error.message; }
+  } catch (error) {
+    bankMessage.textContent = error.message;
+  }
 });
 
 matchForm.addEventListener("submit", async (event) => {
@@ -147,7 +239,9 @@ matchForm.addEventListener("submit", async (event) => {
   } catch (error) {
     formError.textContent = error.message || "Something went wrong. Please try again.";
     formError.hidden = false;
-  } finally { setLoading(false); }
+  } finally {
+    setLoading(false);
+  }
 });
 
 request("/experience-bank").then(populateBank).catch((error) => { bankMessage.textContent = error.message; });

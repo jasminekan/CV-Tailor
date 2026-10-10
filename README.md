@@ -167,3 +167,73 @@ Version 1 delivers the core CV tailoring workflow as a focused, usable MVP:
 ## Roadmap
 
 V2 deliberately stops at evidence selection. Tailored one-page CV generation, user review of generated drafts, PDF/DOCX export, authentication, multi-user storage, PostgreSQL, cloud backups, and saved job history are candidates for V3/V4. A future CV generator should consume selected bank item IDs and produce a separate draft; it should never replace the experience bank.
+
+## V2 matching rules and existing-bank cleanup
+
+Evidence is matched locally: role/project tags never propagate to child bullets.
+A direct phrase in a description or outcome, or an explicit child tag, supports a
+strong match. Standalone skills and role/project tags without direct wording are
+related. Degree matches require both an accepted degree level and an explicitly
+matching subject; named certifications can match directly. The small alias map
+and whole-token boundaries are deliberately conservative. Specific unit or
+automated testing evidence supports generic testing, but not vice versa.
+
+Sentence responsibilities with only recognised concept overlap are related, not
+proof of every obligation. Equivalent skill aliases are deduplicated. Each
+unique requirement contributes 10 points for direct support or 3 for related
+support, with stable bank-order ties. Requirement status and evidence status
+both use the best support available; ranked explanations show the status for
+each requirement when an item has mixed support.
+
+The editor now keeps separate child tags, outcomes, and IDs. New evidence starts
+with empty tags; saving does not copy role/project metadata into it. Existing
+child tags are retained because the bank has no provenance flag distinguishing
+intentional tags from old frontend copies.
+
+Banks saved with the old editor may contain copied parent tags on child bullets.
+Until reviewed, those tags can still cause false strong matches. Do not delete
+all parent/child overlaps: some are legitimate.
+
+A safe review workflow:
+
+1. Copy `data/experience_bank.json` to a dated backup outside the active store.
+2. Make a second review copy, retaining every ID, text, outcome, and parent tag.
+3. Review each child's `skills` and `technologies`. Lists identical to the
+   parent's are cleanup candidates, not proof that each tag is incorrect.
+   Keep only tags specifically supported by that bullet or known to be true of
+   that contribution. For example, the Python/FastAPI API endpoint supports
+   those technologies and API/backend development; the responsive frontend
+   bullet does not establish Python or backend development. The unit-test
+   bullet supports unit testing and testing; do not assume a testing framework
+   or language absent from its evidence.
+4. Preview the review copy with `match_experience_bank` in memory, or run a
+   separate local instance with `EXPERIENCE_BANK_PATH` pointing to that copy.
+   Do not PUT the review copy into the original instance while still reviewing.
+5. Compare selected IDs, statuses, and rankings. Adopt the reviewed copy only
+   after inspection and retain the backup.
+
+For `job_description.txt` (Checkout.com), manually inspect the extracted analysis
+as well as matches: Agile environment and testing evidence should be found;
+BSc/MSc Computer Science should support the stated degree alternatives; mentoring
+should select the additional mentoring record. Sentence responsibilities may
+remain related because leadership, deadlines, resilience, and scale are separate
+claims. Go, payments knowledge, and microservices must not be inferred from
+unrelated technology tags. LLM extraction wording can vary; unsupported wording
+can remain missing until a justified alias or explicit local tag is added.
+
+Related support also includes same-record C# plus .NET declarations, testing
+practice as support for testable code, and demonstrated LLM integration as
+support for AI proficiency. These directional rules do not establish clean code,
+AI expertise, or system design. Partial responsibility explanations identify the
+supported activity and state that other requested claims remain unestablished.
+Explicit project leadership, system ownership, and delivery evidence can support
+those responsibilities; ordinary feature implementation cannot. Equal-score
+ranking prefers demonstrated practical activity, then descriptive support, then
+tag-only declarations, retaining bank order for remaining ties. Scores and
+classifications are unchanged by these tie-breaks.
+
+Qualification extraction preserves alternative degree levels and subjects as one
+requirement string while keeping independent qualifications separate. Grouping
+still depends on LLM output; the matcher does not merge separately extracted
+qualifications. Narrow aliases cover team mentorship and full-stack application
+wording, with support kept on the individual record describing that experience.
