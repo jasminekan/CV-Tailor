@@ -17,6 +17,11 @@ __pycache__/
 .coverage
 .coverage.*
 htmlcov/
+coverage.xml
+coverage.json
+junit.xml
+.tox/
+.nox/
 
 # Environment and secrets
 .env
@@ -27,10 +32,26 @@ htmlcov/
 .DS_Store
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+Thumbs.db
+Desktop.ini
 
 # Build / temporary files
 *.log
 *.tmp
+build/
+dist/
+*.egg-info/
 
 # Local experience-bank data
 data/
+
+# Postman workspace bindings and local variable values
+# Keep sanitised request collections eligible for version control.
+.postman/
+postman/globals/
+postman/environments/
+*.postman_environment.json
+*.postman_globals.json

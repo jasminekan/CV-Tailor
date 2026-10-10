@@ -24,7 +24,6 @@ _CONCEPTS = {
     "javascript": ("javascript", "js"),
     "typescript": ("typescript", "ts"),
     "postgresql": ("postgresql", "postgres"),
-    "rest api": ("rest api", "rest apis"),
     "api development": (
         "api development",
         "api design",
@@ -100,6 +99,7 @@ class _Evidence:
     tags: list[str]
     text: str
     field: str = ""
+    raw_text: str = ""
 
 
 def _collect_evidence(bank: ExperienceBank) -> list[_Evidence]:
@@ -122,6 +122,7 @@ def _collect_evidence(bank: ExperienceBank) -> list[_Evidence]:
                 text=text
             ),
             tags, _positive_text(". ".join([text, *outcomes])), field,
+            ". ".join([text, *outcomes]),
         ))
 
     for skill in bank.skills:
@@ -202,6 +203,49 @@ def _subjects(text: str) -> set[str]:
     return found
 
 
+def _degree_pairs(text: str) -> set[tuple[str, str]]:
+    """Parse explicit OR branches and shared levels/subjects, without cross-pairing."""
+    text = _normalise(text)
+    if _contains(text, "and") and (len(_levels(text)) > 1 or len(_subjects(text)) > 1):
+        return set()  # Compound qualifications are not interpreted as alternatives.
+    pairs = set()
+    pending_levels = set()
+    active_levels = set()
+    for branch in re.split(r"\bor\b", text):
+        levels, subjects = _levels(branch), _subjects(branch)
+        if levels and not subjects:
+            pending_levels |= levels
+            active_levels = set()
+        elif subjects:
+            if levels:
+                active_levels = pending_levels | levels
+                pending_levels = set()
+            elif pending_levels:
+                active_levels = pending_levels
+                pending_levels = set()
+            pairs.update((level, subject) for level in active_levels for subject in subjects)
+    return pairs
+
+
+def _denied(requirement: str, item: _Evidence) -> bool:
+    """Explicit local denial overrides tags; it never invalidates other records."""
+    concept = _canonical(requirement)
+    phrases = _CONCEPTS.get(concept, (concept,))
+    if concept == "c# .net":
+        phrases = ("c#", ".net")
+    text = _normalise(item.raw_text)
+    for phrase in phrases:
+        token = r"(?<![a-z0-9+#.])" + re.escape(phrase) + r"(?![a-z0-9+#.])"
+        patterns = (
+            r"\b(?:no|without|lack|lacks|lacking)\s+" + token + r"\s+(?:experience|knowledge|skills?)\b",
+            r"\b(?:no|without|lack|lacks|lacking)\s+(?:experience|knowledge|skills?)\s+(?:with|in|of)\s+" + token,
+            r"\b(?:not|never)\s+(?:used|using|worked with)\s+" + token,
+        )
+        if any(re.search(pattern, text) for pattern in patterns):
+            return True
+    return False
+
+
 # Activity patterns require an action and its object, not a generic verb alone.
 _ACTIVITIES = {
     "API development": r"\b(?:designed|developed|implemented|built)\b.{0,80}\b(?:api|apis)\b",
@@ -247,7 +291,9 @@ def _related_support(
             for name, pattern in _REQUEST_ACTIVITIES.items()
             if name in activities and re.search(pattern, text)
         )
-        local_concepts = _concepts(item.text) | {_canonical(tag) for tag in item.tags}
+        local_concepts = _concepts(item.text) | {
+            _canonical(tag) for tag in item.tags if not _denied(tag, item)
+        }
         supported += sorted(_concepts(requirement) & local_concepts)
     if supported:
         supported = list(dict.fromkeys(supported))
@@ -269,16 +315,18 @@ def _support(requirement: str, category: str, item: _Evidence) -> tuple[int, lis
     normalised = _normalise(requirement)
     concept = _canonical(requirement)
     kind = item.reference.source_type
+    if _denied(requirement, item):
+        return 0, [], ""
     if category == "qualification":
         if kind not in {"education", "certification"}:
             return 0, [], ""
         if normalised == _normalise(item.reference.text):
             return 2, [item.reference.text], "Exact qualification"
-        levels = _levels(normalised)
-        if levels:
-            subjects = _subjects(normalised)
-            evidence_subjects = _subjects(_normalise(item.reference.text + " " + item.field))
-            if kind == "education" and levels & _levels(item.text) and subjects & evidence_subjects:
+        if _levels(normalised):
+            evidence_degree = item.reference.text
+            if not _subjects(_normalise(evidence_degree)):
+                evidence_degree += " " + item.field
+            if kind == "education" and _degree_pairs(normalised) & _degree_pairs(evidence_degree):
                 return 2, [item.reference.text, item.field], "Degree level and subject match"
             return 0, [], ""
         # No fuzzy certification matching or subject-only qualification claims.
@@ -306,6 +354,28 @@ def _support(requirement: str, category: str, item: _Evidence) -> tuple[int, lis
         return strength, tags, "Explicit local tags" if strength == 2 else "Declared skill or parent context"
 
     return _related_support(requirement, category, item)
+
+
+def _practical_support(requirement: str, item: _Evidence) -> bool:
+    """Require a matching activity or a signal inside the action/object span."""
+    text = _normalise(requirement)
+    concept = _canonical(requirement)
+    for sentence in re.split(r"[.!?;\n](?=\s|$)", item.raw_text):
+        positive = _positive_text(sentence)
+        for name, pattern in _ACTIVITIES.items():
+            for activity in re.finditer(pattern, positive):
+                if concept == _canonical(name):
+                    return True
+                if any(_contains(activity.group(), phrase) for phrase in _CONCEPTS.get(concept, (text,))):
+                    return True
+                if _contains(text, "testable code") and name == "testing":
+                    return True
+                if _contains(text, "ai proficiency") and name == "LLM integration":
+                    return True
+                requested = _REQUEST_ACTIVITIES.get(name)
+                if requested and re.search(requested, text):
+                    return True
+    return False
 
 
 def _requirements(job: JobDescriptionAnalysis) -> list[tuple[str, str]]:
@@ -363,7 +433,7 @@ def match_experience_bank(
         has_support_beyond_tags = any(
             reason != "Declared skill or parent context" for _, _, reason in matches
         )
-        practical = bool(_activities(item)) and has_support_beyond_tags
+        practical = any(_practical_support(requirement, item) for requirement, _, _ in matches)
         tie_break = 2 if practical else int(bool(item.text) and has_support_beyond_tags)
         # Each requirement contributes 10 for direct or 3 for related support.
         ranked_item = RankedEvidence(
