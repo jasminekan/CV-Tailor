@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CV Tailor | Experience Bank</title>
+  <title>JobMatch CV Tailor</title>
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/app.js" defer></script>
 </head>
@@ -11,11 +11,13 @@
   <main class="page-shell">
     <section class="intro" aria-labelledby="page-title">
       <p class="eyebrow">CV Tailor / v2</p>
-      <h1>Keep your evidence ready. Choose what matters for each role.</h1>
+      <h1 id="page-title">Find the experience that fits.</h1>
       <p class="intro-copy">Build a private experience bank once, then use it to find the strongest evidence for every job.</p>
     </section>
 
     <section class="workspace" aria-label="Experience bank and job matching">
+      <details id="bank-editor" class="bank-editor">
+        <summary>Experience bank <span id="bank-summary">Loading…</span> <span id="bank-state" role="status"></span></summary>
       <form id="bank-form" class="panel" novalidate>
         <div class="results-heading">
           <div><p class="eyebrow">Source of truth</p><h2>Experience bank</h2></div>
@@ -38,28 +40,42 @@
         <div id="additional-evidence-editor"></div>
       </form>
 
+      </details>
+
+      <details id="job-editor" class="bank-editor job-editor" open>
+        <summary>Job description — edit and rerun</summary>
       <form id="match-form" class="panel" novalidate>
         <div class="results-heading"><div><p class="eyebrow">Job workspace</p><h2>Find your best evidence</h2></div></div>
         <label for="job-description">Job description</label>
+        <p class="muted">Matching uses your saved experience bank.</p>
+        <p id="saved-bank-notice" class="notice" role="status" hidden>Unsaved bank changes are excluded. Save your bank before matching to include them.</p>
         <textarea id="job-description" rows="12" placeholder="Paste the full job description here..." required></textarea>
         <p id="form-error" class="message error" role="alert" hidden></p>
         <button id="analyse-button" type="submit"><span id="button-label">Analyse and match</span><span id="loading-label" hidden>Working...</span></button>
       </form>
 
+      </details>
+
       <section id="results" class="results" aria-labelledby="results-title" hidden>
-        <div class="results-heading"><div><p class="eyebrow">Job analysis</p><h2 id="results-title">What this role is asking for</h2></div><p id="job-title" class="job-title"></p></div>
-        <div class="result-grid">
-          <article class="result-card"><h3>Technical skills</h3><ul id="technical-skills"></ul></article>
-          <article class="result-card"><h3>Other keywords</h3><ul id="other-keywords"></ul></article>
-          <article class="result-card"><h3>Responsibilities</h3><ul id="responsibilities"></ul></article>
-          <article class="result-card"><h3>Qualifications</h3><ul id="qualifications"></ul></article>
-        </div>
-        <div class="match-results">
-          <article class="result-card status-strong"><h3>Strong matches</h3><ul id="strong-matches"></ul></article>
-          <article class="result-card status-related"><h3>Related evidence</h3><ul id="related-matches"></ul></article>
-          <article class="result-card status-missing"><h3>Not found</h3><ul id="missing-requirements"></ul></article>
-          <article class="result-card result-card-wide"><h3>Most relevant evidence</h3><ol id="ranked-evidence"></ol></article>
-        </div>
+        <div class="results-heading"><div><p class="eyebrow">Your job match dashboard</p><h2 id="results-title" tabindex="-1"></h2></div><button id="edit-job" class="secondary-button" type="button" aria-controls="job-editor">Edit job description</button></div>
+        <p id="refresh-notice" class="notice" role="status" hidden></p>
+        <section class="dashboard-section" aria-labelledby="overview-title">
+          <h3 id="overview-title">Job overview</h3>
+          <p class="muted">Selected requirements from the job description.</p>
+          <div id="overview" class="overview-grid"></div>
+          <details><summary>Full job analysis</summary><div id="full-analysis" class="overview-grid"></div></details>
+        </section>
+        <section class="dashboard-section" aria-labelledby="strengths-title">
+          <h3 id="strengths-title">Your strengths and gaps</h3>
+          <p class="muted">Support found in your saved experience bank. Missing evidence does not establish a lack of experience.</p>
+          <div id="match-groups" class="match-results"></div>
+        </section>
+        <section class="dashboard-section" aria-labelledby="experience-title">
+          <h3 id="experience-title">Relevant CV experience</h3>
+          <p class="muted">Original evidence to consider for your CV. Achievements and contributions are highlighted; ranking within each evidence type is preserved.</p>
+          <div id="recommendations"></div>
+        </section>
+        <details class="diagnostics"><summary>Full matching diagnostics</summary><p class="muted">Original analysis and matching responses, including all signals, explanations and ranking scores.</p><pre id="diagnostics"></pre></details>
       </section>
     </section>
   </main>

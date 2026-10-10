@@ -371,3 +371,82 @@ ul {
   border-bottom: 1px solid var(--muted);
   margin-bottom: 12px;
 }
+
+/* Dashboard and progressive disclosure */
+[hidden] { display: none !important; }
+body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+.page-shell { padding-top: 36px; }
+.intro { margin-bottom: 28px; }
+h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.12; }
+h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); }
+h3 { font-size: 1.1rem; letter-spacing: 0; text-transform: none; }
+h4 { margin: 0 0 12px; font-size: 1rem; line-height: 1.5; }
+p { line-height: 1.6; }
+a { color: var(--accent-dark); }
+.workspace { gap: 24px; }
+.panel, .results, .bank-editor { border-radius: 12px; }
+.bank-editor { border: 1px solid var(--line); background: var(--surface); }
+.bank-editor > summary { padding: 20px; }
+.bank-editor > summary span { display: inline-block; margin-left: 12px; font-size: .85rem; color: var(--muted); font-weight: 400; }
+#bank-state { color: var(--accent-dark); font-weight: 700; }
+.bank-editor form { border: 0; border-top: 1px solid var(--line); box-shadow: none; }
+summary { cursor: pointer; font-weight: 600; padding: 12px 0; line-height: 1.5; }
+summary:hover { color: var(--accent-dark); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+details { min-width: 0; }
+details[open] > summary { margin-bottom: 12px; }
+textarea { min-height: 0; margin: 0; }
+#job-description { min-height: 220px; }
+#analyse-button { justify-self: start; }
+.muted { color: var(--muted); font-size: .9rem; }
+.notice { padding: 14px 18px; border: 1px solid #ead2a3; border-radius: 8px; background: #fff8e9; color: #705016; }
+.dashboard-section { padding: 24px 0; border-top: 1px solid var(--line); }
+.overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.overview-card { padding: 16px; border-radius: 8px; background: #f5f7f3; }
+.overview-card p { margin: 12px 0 0; }
+.result-card { border-radius: 8px; }
+.requirement-list, .support-list { list-style: none; padding: 0; }
+.requirement-row { padding: 12px 0; border-top: 1px solid var(--line); }
+.requirement-name { font-weight: 600; margin-bottom: 4px; }
+.requirement-row summary { font-size: .85rem; }
+.support-list li { padding: 12px; background: var(--paper); border-radius: 6px; }
+.support-list p { margin-bottom: 6px; }
+.source-label { font-size: .8rem; color: var(--muted); font-weight: 600; }
+.recommendation-group { margin-top: 24px; }
+.evidence-card { padding: 16px 20px; margin: 12px 0; border: 1px solid var(--line); border-radius: 8px; }
+.specific-evidence { border-left: 4px solid #3f8065; background: #f5faf7; }
+.specific-evidence > p:nth-child(2) { font-weight: 600; }
+.context-evidence { background: #fafbf9; }
+.evidence-card p { margin-bottom: 8px; }
+.diagnostics { border-top: 1px solid var(--line); }
+pre { overflow: auto; max-height: 480px; padding: 16px; background: #f5f7f3; font-size: .8rem; }
+.evidence-entry { display: grid; gap: 8px; padding: 12px 0; }
+.evidence-entry button { justify-self: start; }
+.requirement-name, .evidence-card, .support-list, .bank-editor summary, .overview-card { overflow-wrap: anywhere; }
+@media (max-width: 680px) {
+  .overview-grid { grid-template-columns: 1fr; }
+  .bank-editor > summary span { display: block; margin: 6px 0 0; }
+  #analyse-button { width: 100%; }
+}
+
+/* Focused dashboard refinements */
+.status-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 1.05rem; }
+.status-count { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; padding: 4px 10px; border-radius: 20px; font-size: 1.2rem; background: var(--paper); }
+.status-strong .status-count { color: #32654f; background: #edf6f0; }
+.status-related .status-count { color: #79561f; background: #fff8e9; }
+.status-missing .status-count { color: #a33427; background: var(--soft-accent); }
+.requirement-row p { margin-bottom: 4px; }
+.requirement-row { padding: 10px 0; }
+.recommendation-group { margin-top: 18px; }
+.skill-chips { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.skill-chip { padding: 0 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); max-width: 100%; }
+.skill-chip summary { padding: 6px 0; font-size: .9rem; }
+.skill-chip[open] { flex-basis: 100%; border-radius: 8px; padding-bottom: 12px; }
+.education-row { padding: 0 12px; border-bottom: 1px solid var(--line); }
+.education-row summary { padding: 8px 0; font-size: .9rem; }
+.education-row[open] { padding-bottom: 12px; }
+.job-editor form { margin: 0; }
+@media (max-width: 680px) {
+  .status-heading { font-size: 1rem; }
+  .skill-chip { overflow-wrap: anywhere; }
+}
