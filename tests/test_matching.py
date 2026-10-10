@@ -366,7 +366,7 @@ def test_unrelated_implementation_does_not_support_unsupported_claims(requiremen
     assert result.missing_requirements
 
 
-def test_practical_evidence_wins_equal_score_without_changing_classification():
+def test_unrelated_api_activity_does_not_win_agile_tie():
     bank = ExperienceBank(
         work_experience=[WorkExperience(
             employer="Example",
@@ -380,7 +380,7 @@ def test_practical_evidence_wins_equal_score_without_changing_classification():
     )
     result = match(bank, other_keywords=["Agile"])
     assert [r.score for r in result.ranked_evidence] == [10, 10]
-    assert result.ranked_evidence[0].evidence.evidence_id == "practical"
+    assert result.ranked_evidence[0].evidence.source_type == "work_experience"
     assert all(r.status == "strong" for r in result.ranked_evidence)
 
 
@@ -429,3 +429,121 @@ def test_separate_backend_and_frontend_records_do_not_establish_full_stack():
         EvidenceItem(text="Built frontend interfaces")
     ])
     assert match(bank, technical_skills=["full-stack development"]).missing_requirements
+
+
+@pytest.mark.parametrize("denial,tag", [
+    ("No Python experience", "Python"),
+    ("No experience with Python", "Python"),
+    ("Never used JavaScript", "JS"),
+    ("Lacking PostgreSQL knowledge", "Postgres"),
+])
+def test_explicit_denial_overrides_local_tags_only(denial, tag):
+    bank = ExperienceBank(additional_evidence=[
+        EvidenceItem(id="denied", text=denial, skills=[tag]),
+        EvidenceItem(id="positive", text=f"Built services using {tag}"),
+    ])
+    result = match(bank, technical_skills=[tag])
+    assert result.strong_matches
+    assert [e.evidence_id for e in result.strong_matches[0].evidence] == ["positive"]
+    assert [r.evidence.evidence_id for r in result.ranked_evidence] == ["positive"]
+
+
+def test_denial_in_outcome_overrides_tags_without_removing_unrelated_capability():
+    bank = ExperienceBank(additional_evidence=[EvidenceItem(
+        text="Implemented services using FastAPI", skills=["Python", "FastAPI"],
+        outcomes=["No Python experience"],
+    )])
+    result = match(bank, technical_skills=["Python", "FastAPI"])
+    assert [r.requirement for r in result.missing_requirements] == ["Python"]
+    assert [r.requirement for r in result.strong_matches] == ["FastAPI"]
+
+
+def test_denied_tags_cannot_supply_partial_responsibility_support():
+    bank = ExperienceBank(additional_evidence=[EvidenceItem(
+        text="No mentoring experience", skills=["mentorship"],
+    )])
+    result = match(bank, responsibilities=["Mentor junior developers and manage deadlines"])
+    assert result.missing_requirements
+
+
+@pytest.mark.parametrize("qualification,field,supported", [
+    ("BSc", "Computer Science", False),
+    ("BSc", "Engineering", True),
+    ("MSc", "Computer Science", True),
+    ("MSc", "Engineering", False),
+])
+def test_degree_alternatives_preserve_level_subject_pairs(qualification, field, supported):
+    bank = ExperienceBank(education=[Education(
+        qualification=qualification, field=field, institution="Example",
+    )])
+    result = match(bank, qualifications=["BSc in Engineering or MSc in Computer Science"])
+    assert bool(result.strong_matches) == supported
+    assert bool(result.missing_requirements) != supported
+
+
+@pytest.mark.parametrize("qualification,field", [
+    ("BSc", "Computer Science"), ("MSc", "Engineering"),
+])
+def test_shared_degree_levels_and_subjects_remain_supported(qualification, field):
+    bank = ExperienceBank(education=[Education(
+        qualification=qualification, field=field, institution="Example",
+    )])
+    result = match(bank, qualifications=[
+        "Bachelor's or Master's degree in Computer Science, Engineering, or a related field",
+    ])
+    assert result.strong_matches
+
+
+def test_joint_degree_requirements_are_not_treated_as_alternatives():
+    bank = ExperienceBank(education=[Education(
+        qualification="BSc Computer Science", institution="Example",
+    )])
+    assert match(bank, qualifications=["BSc in Computer Science and MSc in Engineering"]).missing_requirements
+
+
+@pytest.mark.parametrize("requirements", [
+    ["REST API", "REST APIs", "API development"],
+    ["API development", "REST APIs", "REST API"],
+])
+def test_overlapping_api_aliases_have_one_key_and_one_reward(requirements):
+    bank = ExperienceBank(additional_evidence=[EvidenceItem(text="Implemented REST API endpoints")])
+    result = match(bank, technical_skills=requirements)
+    assert len(result.strong_matches) == 1
+    assert result.strong_matches[0].requirement == requirements[0]
+    assert result.ranked_evidence[0].score == 10
+
+
+def test_alias_groups_do_not_overlap():
+    from app.services.matching import _CONCEPTS
+    aliases = [alias for group in _CONCEPTS.values() for alias in group]
+    assert len(aliases) == len(set(aliases))
+
+
+def test_unrelated_activity_does_not_win_tie_for_requirement():
+    bank = ExperienceBank(additional_evidence=[
+        EvidenceItem(id="plain", text="Worked in an Agile environment"),
+        EvidenceItem(id="unrelated", text="Worked in an Agile environment. Built API endpoints."),
+    ])
+    result = match(bank, other_keywords=["Agile"])
+    assert [r.score for r in result.ranked_evidence] == [10, 10]
+    assert [r.evidence.evidence_id for r in result.ranked_evidence] == ["plain", "unrelated"]
+
+
+def test_relevant_activity_still_wins_tie_and_scores_are_unchanged():
+    bank = ExperienceBank(additional_evidence=[
+        EvidenceItem(id="description", text="Experience with API development"),
+        EvidenceItem(id="practical", text="Implemented API endpoints"),
+    ])
+    result = match(bank, technical_skills=["API development"])
+    assert [r.evidence.evidence_id for r in result.ranked_evidence] == ["practical", "description"]
+    assert [r.score for r in result.ranked_evidence] == [10, 10]
+
+
+def test_unrelated_action_in_same_sentence_does_not_earn_practical_priority():
+    bank = ExperienceBank(additional_evidence=[
+        EvidenceItem(id="plain", text="Worked in an Agile environment"),
+        EvidenceItem(id="unrelated", text="Implemented API endpoints in an Agile environment"),
+    ])
+    result = match(bank, other_keywords=["Agile"])
+    assert [r.evidence.evidence_id for r in result.ranked_evidence] == ["plain", "unrelated"]
+    assert [r.score for r in result.ranked_evidence] == [10, 10]

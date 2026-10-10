@@ -155,3 +155,37 @@ def test_match_uses_saved_experience_bank(
     assert response.status_code == 200
     assert response.json()["related_matches"][0]["requirement"] == "Python"
     assert response.json()["missing_requirements"][0]["requirement"] == "Docker"
+
+@pytest.mark.parametrize("description", [" " * 20, "\t\n" * 20, "\u00a0" * 20])
+def test_analyse_rejects_whitespace_before_calling_service(monkeypatch, description):
+    def unexpected_call(job_description):
+        pytest.fail("Whitespace-only requests must not reach the LLM service")
+
+    monkeypatch.setattr("app.main.analyse_job_description_with_llm", unexpected_call)
+    response = client.post("/analyse", json={"job_description": description})
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "job_description"]
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t\n", "\u00a0"])
+@pytest.mark.parametrize("field", [
+    "job_title", "technical_skills", "other_keywords", "responsibilities", "qualifications",
+])
+def test_analysis_rejects_blank_title_and_individual_entries(field, blank):
+    payload = {"job_title": "Engineer"}
+    payload[field] = blank if field == "job_title" else ["Valid entry", blank]
+    with pytest.raises(ValidationError):
+        JobDescriptionAnalysis.model_validate(payload)
+
+
+def test_analysis_allows_explicit_empty_lists_and_preserves_nonblank_text():
+    payload = {
+        "job_title": " Engineer ",
+        "technical_skills": [],
+        "other_keywords": [],
+        "responsibilities": [],
+        "qualifications": [],
+    }
+    assert JobDescriptionAnalysis.model_validate(payload).model_dump() == payload
+    description = "  A valid multiline job description.\nPython developer.  "
+    assert JobDescriptionRequest(job_description=description).job_description == description

@@ -9,17 +9,27 @@ const bankMessage = document.querySelector("#bank-message");
 const results = document.querySelector("#results");
 const MIN_DESCRIPTION_LENGTH = 20;
 let loadedBank = {};
+let bankLoaded = false;
+const saveBankButton = document.querySelector("#save-bank-button");
+saveBankButton.disabled = true;
 
 function addWorkExperience(work = {}) {
   const card = document.createElement("div");
   card.className = "editor-card work-entry";
   card.original = work;
+  // Static markup only; saved values are assigned as DOM properties below.
   card.innerHTML = `<button class="remove-button" type="button">Remove</button>
-    <div class="input-grid"><input data-field="employer" placeholder="Employer" value="${work.employer || ""}" required><input data-field="role" placeholder="Role" value="${work.role || ""}" required><input data-field="start_date" placeholder="Start date" value="${work.start_date || ""}"><input data-field="end_date" placeholder="End date" value="${work.end_date || ""}"></div>
-    <input data-field="skills" placeholder="Role skills, comma separated" value="${(work.skills || []).join(", ")}">
-    <input data-field="technologies" placeholder="Technologies, comma separated" value="${(work.technologies || []).join(", ")}">
-    <textarea data-field="summary" rows="2" placeholder="Role summary">${work.summary || ""}</textarea>
+    <div class="input-grid"><input data-field="employer" placeholder="Employer" required><input data-field="role" placeholder="Role" required><input data-field="start_date" placeholder="Start date"><input data-field="end_date" placeholder="End date"></div>
+    <input data-field="skills" placeholder="Role skills, comma separated">
+    <input data-field="technologies" placeholder="Technologies, comma separated">
+    <textarea data-field="summary" rows="2" placeholder="Role summary"></textarea>
     <div data-field="achievements"></div>`;
+  for (const field of ["employer", "role", "start_date", "end_date", "summary"]) {
+    card.querySelector(`[data-field="${field}"]`).value = work[field] || "";
+  }
+  for (const field of ["skills", "technologies"]) {
+    card.querySelector(`[data-field="${field}"]`).value = (work[field] || []).join(", ");
+  }
   evidenceEditor(card.querySelector('[data-field="achievements"]'), work.achievements || []);
   card.querySelector(".remove-button").addEventListener("click", () => card.remove());
   document.querySelector("#work-list").append(card);
@@ -30,11 +40,17 @@ function addProject(project = {}) {
   card.className = "editor-card project-entry";
   card.original = project;
   card.innerHTML = `<button class="remove-button" type="button">Remove</button>
-    <input data-field="name" placeholder="Project name" value="${project.name || ""}" required>
-    <input data-field="skills" placeholder="Skills, comma separated" value="${(project.skills || []).join(", ")}">
-    <input data-field="technologies" placeholder="Technologies, comma separated" value="${(project.technologies || []).join(", ")}">
-    <textarea data-field="description" rows="2" placeholder="Project description">${project.description || ""}</textarea>
+    <input data-field="name" placeholder="Project name" required>
+    <input data-field="skills" placeholder="Skills, comma separated">
+    <input data-field="technologies" placeholder="Technologies, comma separated">
+    <textarea data-field="description" rows="2" placeholder="Project description"></textarea>
     <div data-field="evidence"></div>`;
+  for (const field of ["name", "description"]) {
+    card.querySelector(`[data-field="${field}"]`).value = project[field] || "";
+  }
+  for (const field of ["skills", "technologies"]) {
+    card.querySelector(`[data-field="${field}"]`).value = (project[field] || []).join(", ");
+  }
   evidenceEditor(card.querySelector('[data-field="evidence"]'), project.evidence || []);
   card.querySelector(".remove-button").addEventListener("click", () => card.remove());
   document.querySelector("#project-list").append(card);
@@ -203,6 +219,10 @@ document.querySelector("#add-project").addEventListener("click", () => addProjec
 
 bankForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!bankLoaded) {
+    bankMessage.textContent = "Load your experience bank successfully before saving. Reload to retry.";
+    return;
+  }
   bankMessage.textContent = "Saving...";
   try {
     const saved = await request("/experience-bank", {
@@ -244,4 +264,12 @@ matchForm.addEventListener("submit", async (event) => {
   }
 });
 
-request("/experience-bank").then(populateBank).catch((error) => { bankMessage.textContent = error.message; });
+request("/experience-bank").then((bank) => {
+  populateBank(bank);
+  bankLoaded = true;
+  saveBankButton.disabled = false;
+}).catch((error) => {
+  bankLoaded = false;
+  saveBankButton.disabled = true;
+  bankMessage.textContent = `Bank loading failed: ${error.message}. Reload to retry; saving is disabled.`;
+});
