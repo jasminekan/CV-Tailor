@@ -3,7 +3,14 @@ from pydantic import ValidationError
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models import JobDescriptionAnalysis, JobDescriptionRequest
+from app.models import (
+    ExperienceBank,
+    JobDescriptionAnalysis,
+    JobDescriptionRequest,
+    MatchRequest,
+    Project,
+)
+from app.repositories.json_experience_bank import JsonExperienceBankRepository
 from app.services.llm import LLMServiceError
 
 client = TestClient(app)
@@ -20,14 +27,16 @@ def test_frontend_is_served_from_root() -> None:
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "Analyse job" in response.text
+    assert "Analyse and match" in response.text
 
 
 def test_frontend_assets_are_served() -> None:
     response = client.get("/static/app.js")
 
     assert response.status_code == 200
-    assert 'fetch("/analyse"' in response.text
+    assert 'request("/analyse"' in response.text
+    assert 'request("/experience-bank"' in response.text
+    assert 'request("/match"' in response.text
 
 
 def test_analyse_returns_structured_llm_analysis(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -106,3 +115,43 @@ def test_analysis_lists_default_to_empty() -> None:
     assert analysis.other_keywords == []
     assert analysis.responsibilities == []
     assert analysis.qualifications == []
+
+
+def test_experience_bank_can_be_saved_and_loaded(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(
+        "app.main.experience_bank_repository",
+        JsonExperienceBankRepository(tmp_path / "experience_bank.json"),
+    )
+    bank = ExperienceBank(projects=[Project(name="API", technologies=["Python"])])
+
+    save_response = client.put("/experience-bank", json=bank.model_dump())
+    load_response = client.get("/experience-bank")
+
+    assert save_response.status_code == 200
+    assert load_response.json() == bank.model_dump()
+
+
+def test_match_uses_saved_experience_bank(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    repository = JsonExperienceBankRepository(tmp_path / "experience_bank.json")
+    repository.save(ExperienceBank(projects=[Project(name="API", technologies=["Python"])]))
+    monkeypatch.setattr("app.main.experience_bank_repository", repository)
+
+    response = client.post(
+        "/match",
+        json=MatchRequest(
+            job_analysis=JobDescriptionAnalysis(
+                job_title="Engineer",
+                technical_skills=["Python", "Docker"],
+            )
+        ).model_dump(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["related_matches"][0]["requirement"] == "Python"
+    assert response.json()["missing_requirements"][0]["requirement"] == "Docker"

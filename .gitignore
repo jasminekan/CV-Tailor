@@ -31,3 +31,6 @@ htmlcov/
 # Build / temporary files
 *.log
 *.tmp
+
+# Local experience-bank data
+data/
