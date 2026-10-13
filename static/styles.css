@@ -446,6 +446,42 @@ pre { overflow: auto; max-height: 480px; padding: 16px; background: #f5f7f3; fon
 .education-row summary { padding: 8px 0; font-size: .9rem; }
 .education-row[open] { padding-bottom: 12px; }
 .job-editor form { margin: 0; }
+/* Current CV selection view */
+.workspace-navigation { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
+.workspace-navigation button[aria-pressed="false"] { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+.workspace-navigation button:hover:not(:disabled) { color: #fff; background: var(--accent-dark); }
+#current-cv-fields { display: grid; gap: 28px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.cv-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+.cv-picker select, .cv-bullet select { flex: 1; min-width: 0; width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); font: inherit; }
+.cv-picker input { flex: 1; min-width: 0; }
+.cv-card { padding: 18px; border: 1px solid var(--line); border-radius: 8px; margin-top: 16px; overflow-wrap: anywhere; }
+.cv-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.cv-controls button { padding: 8px 12px; }
+.cv-picker button:hover:not(:disabled), .cv-controls button:hover:not(:disabled), #retry-current-cv:hover:not(:disabled) { color: #fff; background: var(--accent-dark); }
+.cv-bullets { list-style: none; padding: 0; }
+.cv-bullet { padding: 14px 0; border-top: 1px solid var(--line); min-width: 0; }
+.cv-bullet-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.cv-missing { border-left: 4px solid var(--accent); }
+.cv-picker button:disabled, .cv-controls button:disabled { cursor: not-allowed; }
+#retry-current-cv { justify-self: start; }
+.cv-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.cv-settings-grid label, .cv-group-heading label { display: block; margin-bottom: 8px; }
+.cv-settings-grid input[aria-invalid="true"], .cv-group-heading input[aria-invalid="true"] { border-color: var(--accent); }
+.cv-skill-list { padding: 0; list-style: none; }
+.cv-skill { padding: 12px 0; border-top: 1px solid var(--line); }
+.cv-skill select { width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); font: inherit; }
+.cv-group-heading { margin-bottom: 12px; }
+.cv-preview { padding: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow-wrap: anywhere; }
+.cv-preview section { padding: 20px 0; border-top: 1px solid var(--line); }
+.cv-preview article { margin-top: 16px; }
+.cv-source-text { white-space: pre-wrap; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 680px) {
+  .cv-picker { align-items: stretch; flex-direction: column; }
+  .workspace-navigation button { width: 100%; }
+  .cv-settings-grid { grid-template-columns: 1fr; }
+  .cv-preview { padding: 20px; }
+}
 @media (max-width: 680px) {
   .status-heading { font-size: 1rem; }
   .skill-chip { overflow-wrap: anywhere; }

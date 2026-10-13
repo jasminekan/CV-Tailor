@@ -64,6 +64,16 @@ function splitValues(value) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function readTags(value, original = []) {
+  // An unrelated save must not split an existing tag containing a comma.
+  return value === original.join(", ") ? [...original] : splitValues(value);
+}
+
+function readBankField(input, original = "") {
+  const displayed = String(original ?? "").replace(/\r\n?/g, "\n");
+  return input.value === displayed ? original ?? "" : input.value.trim();
+}
+
 // Keep each item's metadata attached to its row while editing or reordering.
 function evidenceEditor(container, items) {
   container.replaceChildren();
@@ -103,26 +113,36 @@ function evidenceEditor(container, items) {
 function readEvidence(container) {
   return [...container.querySelectorAll(".evidence-entry")].map((row) => {
     const value = (field) => row.querySelector(`[data-field="${field}"]`).value.trim();
+    const text = row.querySelector('[data-field="text"]').value;
+    // Textareas normalise line endings. Keep original bytes when the displayed
+    // text is unchanged, and never trim a user's CV-ready bullet wording.
+    const originalText = row.original.text;
     return {
       ...row.original,
-      text: value("text"),
-      skills: splitValues(value("skills")),
-      technologies: splitValues(value("technologies")),
-      outcomes: value("outcomes").split("\n").map((line) => line.trim()).filter(Boolean),
+      text: typeof originalText === "string" && text === originalText.replace(/\r\n?/g, "\n") ? originalText : text,
+      skills: readTags(row.querySelector('[data-field="skills"]').value, row.original.skills),
+      technologies: readTags(row.querySelector('[data-field="technologies"]').value, row.original.technologies),
+      outcomes: row.querySelector('[data-field="outcomes"]').value === (row.original.outcomes || []).join("\n").replace(/\r\n?/g, "\n")
+        ? [...(row.original.outcomes || [])]
+        : value("outcomes").split("\n").map((line) => line.trim()).filter(Boolean),
     };
-  }).filter((item) => item.text);
+  }).filter((item) => item.text.trim());
 }
 
 function parseLines(id, fields) {
-  const remaining = [...(loadedBank[id] || [])];
-  return document.querySelector(`#${id}`).value.split("\n").filter((line) => line.trim()).map((line) => {
+  const originals = loadedBank[id] || [];
+  const input = document.querySelector(`#${id}`).value;
+  const displayed = originals.map(item => fields.map(field => Array.isArray(item[field]) ? item[field].join(", ") : item[field] || "").join(" | ")).join("\n");
+  if (input === displayed.replace(/\r\n?/g, "\n")) return originals.map(item => ({ ...item }));
+  const remaining = [...originals];
+  return input.split("\n").filter((line) => line.trim()).map((line) => {
     const values = line.split("|").map((value) => value.trim());
     const index = remaining.findIndex((item) => item[fields[0]] === values[0]);
     const original = index >= 0 ? remaining.splice(index, 1)[0] : {};
     const parsed = Object.fromEntries(fields.map((field, index) => [
       field,
       field === "skills"
-        ? splitValues(values[index] || "")
+        ? readTags(values[index] || "", original[field])
         : values[index] || (field === "year" ? null : ""),
     ]));
     return { ...original, ...parsed };
@@ -131,9 +151,9 @@ function parseLines(id, fields) {
 
 function readBank() {
   const workExperience = [...document.querySelectorAll(".work-entry")].map((card) => {
-    const value = (field) => card.querySelector(`[data-field="${field}"]`).value.trim();
-    const skills = splitValues(value("skills"));
-    const technologies = splitValues(value("technologies"));
+    const value = (field) => readBankField(card.querySelector(`[data-field="${field}"]`), card.original[field]);
+    const skills = readTags(card.querySelector('[data-field="skills"]').value, card.original.skills);
+    const technologies = readTags(card.querySelector('[data-field="technologies"]').value, card.original.technologies);
     return {
       ...card.original,
       employer: value("employer"),
@@ -147,9 +167,9 @@ function readBank() {
     };
   });
   const projects = [...document.querySelectorAll(".project-entry")].map((card) => {
-    const value = (field) => card.querySelector(`[data-field="${field}"]`).value.trim();
-    const skills = splitValues(value("skills"));
-    const technologies = splitValues(value("technologies"));
+    const value = (field) => readBankField(card.querySelector(`[data-field="${field}"]`), card.original[field]);
+    const skills = readTags(card.querySelector('[data-field="skills"]').value, card.original.skills);
+    const technologies = readTags(card.querySelector('[data-field="technologies"]').value, card.original.technologies);
     return {
       ...card.original,
       name: value("name"),
@@ -161,7 +181,7 @@ function readBank() {
   });
   return {
     ...loadedBank,
-    skills: splitValues(document.querySelector("#skills").value),
+    skills: readTags(document.querySelector("#skills").value, loadedBank.skills),
     work_experience: workExperience,
     projects,
     education: parseLines("education", ["qualification", "institution", "field", "year"]),
@@ -218,6 +238,10 @@ function disclosure(label, ...children) {
 
 function bankSnapshot() {
   return JSON.stringify(readBank());
+}
+
+function updateBankSummary(bank) {
+  document.querySelector("#bank-summary").textContent = `${bank.work_experience.length} roles · ${bank.projects.length} projects · ${bank.skills.length} skills`;
 }
 
 function updateState() {
@@ -386,12 +410,18 @@ document.querySelector("#add-project").addEventListener("click", () => addProjec
 
 bankForm.addEventListener("submit", async event => {
   event.preventDefault();
+  if (saving || matching) return;
   if (!bankLoaded) {
     bankMessage.textContent = "Load your experience bank successfully before saving. Reload to retry.";
     return;
   }
   bankMessage.textContent = "Saving...";
   try {
+    const submitted = readBank();
+    const snapshot = JSON.stringify(submitted);
+    saving = true;
+    bankForm.inert = true;
+    saveBankButton.disabled = true;
     const saved = await request("/experience-bank", {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(submitted),
     });
@@ -407,6 +437,7 @@ bankForm.addEventListener("submit", async event => {
       bankMessage.textContent = "Submitted changes saved. Newer edits are still unsaved.";
     }
     if (changed) bankVersion += 1;
+    window.dispatchEvent(new CustomEvent("experience-bank-saved", { detail: saved }));
     updateBankSummary(saved);
     updateState();
   } catch (error) {
@@ -414,7 +445,7 @@ bankForm.addEventListener("submit", async event => {
   } finally {
     saving = false;
     bankForm.inert = false;
-    saveButton.disabled = false;
+    saveBankButton.disabled = false;
   }
 });
 
@@ -465,6 +496,10 @@ matchForm.addEventListener("submit", async event => {
 
 request("/experience-bank").then((bank) => {
   populateBank(bank);
+  bankBaseline = bankSnapshot();
+  bankLoading = false;
+  updateBankSummary(bank);
+  updateState();
   bankLoaded = true;
   saveBankButton.disabled = false;
 }).catch((error) => {

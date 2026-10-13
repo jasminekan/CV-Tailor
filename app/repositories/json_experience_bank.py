@@ -14,10 +14,25 @@ class JsonExperienceBankRepository:
         self.path = path
 
     def load(self) -> ExperienceBank:
-        if not self.path.exists():
-            return ExperienceBank()
         try:
-            return ExperienceBank.model_validate_json(self.path.read_text(encoding="utf-8"))
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+            bank = ExperienceBank.model_validate(payload)
+            # PUT may generate new IDs, but stored records must already have
+            # them. Generating IDs on each GET would break saved CV references.
+            records = [
+                record
+                for field in ("work_experience", "projects", "education", "certifications", "additional_evidence")
+                for record in payload.get(field, [])
+            ]
+            for work in payload.get("work_experience", []):
+                records.extend(work.get("achievements", []))
+            for project in payload.get("projects", []):
+                records.extend(project.get("evidence", []))
+            if any("id" not in record for record in records):
+                raise ValueError("Saved experience-bank records must include stable IDs.")
+            return bank
+        except FileNotFoundError:
+            return ExperienceBank()
         except (OSError, json.JSONDecodeError, ValueError) as error:
             raise ExperienceBankRepositoryError("The experience bank could not be loaded.") from error
 
@@ -31,6 +46,9 @@ class JsonExperienceBankRepository:
             )
             os.replace(temporary_path, self.path)
         except OSError as error:
-            temporary_path.unlink(missing_ok=True)
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
             raise ExperienceBankRepositoryError("The experience bank could not be saved.") from error
         return bank

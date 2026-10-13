@@ -6,6 +6,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.models import (
+    CurrentCV,
+    CurrentCVLoadResponse,
     ExperienceBank,
     ExperienceBankMatch,
     JobDescriptionAnalysis,
@@ -16,6 +18,8 @@ from app.repositories.json_experience_bank import (
     ExperienceBankRepositoryError,
     JsonExperienceBankRepository,
 )
+from app.repositories.json_current_cv import CurrentCVRepositoryError, JsonCurrentCVRepository
+from app.services.current_cv import validate_current_cv_references
 from app.services.llm import LLMServiceError, analyse_job_description_with_llm
 from app.services.matching import match_experience_bank
 
@@ -27,6 +31,22 @@ EXPERIENCE_BANK_PATH = Path(
     os.getenv("EXPERIENCE_BANK_PATH", str(BASE_DIR / "data" / "experience_bank.json"))
 )
 experience_bank_repository = JsonExperienceBankRepository(EXPERIENCE_BANK_PATH)
+CURRENT_CV_PATH = Path(
+    os.getenv("CURRENT_CV_PATH", str(BASE_DIR / "data" / "current_cv.json"))
+)
+current_cv_repository = JsonCurrentCVRepository(CURRENT_CV_PATH)
+
+# Neither store may overwrite the other store or its temporary save file.
+bank_store_paths = {
+    EXPERIENCE_BANK_PATH.resolve(),
+    EXPERIENCE_BANK_PATH.with_suffix(f"{EXPERIENCE_BANK_PATH.suffix}.tmp").resolve(),
+}
+cv_store_paths = {
+    CURRENT_CV_PATH.resolve(),
+    CURRENT_CV_PATH.with_suffix(f"{CURRENT_CV_PATH.suffix}.tmp").resolve(),
+}
+if bank_store_paths & cv_store_paths:
+    raise ValueError("Experience bank and Current CV storage paths must not overlap.")
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -73,6 +93,52 @@ def save_experience_bank(bank: ExperienceBank) -> ExperienceBank:
         raise HTTPException(
             status_code=503,
             detail="The experience bank could not be saved.",
+        ) from error
+
+
+@app.get("/current-cv", response_model=CurrentCVLoadResponse)
+def get_current_cv() -> CurrentCVLoadResponse:
+    try:
+        current_cv = current_cv_repository.load()
+    except CurrentCVRepositoryError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="The Current CV could not be loaded.",
+        ) from error
+    try:
+        bank = experience_bank_repository.load()
+    except ExperienceBankRepositoryError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="The experience bank could not be loaded.",
+        ) from error
+    return CurrentCVLoadResponse(
+        current_cv=current_cv,
+        reference_issues=validate_current_cv_references(current_cv, bank),
+    )
+
+
+@app.put("/current-cv", response_model=CurrentCV)
+def save_current_cv(current_cv: CurrentCV) -> CurrentCV:
+    try:
+        bank = experience_bank_repository.load()
+    except ExperienceBankRepositoryError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="The experience bank could not be loaded.",
+        ) from error
+    issues = validate_current_cv_references(current_cv, bank)
+    if issues:
+        raise HTTPException(
+            status_code=422,
+            detail=[issue.model_dump() for issue in issues],
+        )
+    try:
+        return current_cv_repository.save(current_cv)
+    except CurrentCVRepositoryError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="The Current CV could not be saved.",
         ) from error
 
 
