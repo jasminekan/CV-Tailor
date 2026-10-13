@@ -45,8 +45,10 @@ build/
 dist/
 *.egg-info/
 
-# Local experience-bank data
+# Local experience-bank and Current CV data
 data/
+experience_bank.json
+current_cv.json
 
 # Postman workspace bindings and local variable values
 # Keep sanitised request collections eligible for version control.

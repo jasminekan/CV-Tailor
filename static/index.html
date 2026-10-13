@@ -6,16 +6,22 @@
   <title>JobMatch CV Tailor</title>
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/app.js" defer></script>
+  <script src="/static/current_cv.js" defer></script>
 </head>
 <body>
   <main class="page-shell">
     <section class="intro" aria-labelledby="page-title">
-      <p class="eyebrow">CV Tailor / v2</p>
+      <p class="eyebrow">CV Tailor / v3.1</p>
       <h1 id="page-title">Find the experience that fits.</h1>
       <p class="intro-copy">Build a private experience bank once, then use it to find the strongest evidence for every job.</p>
     </section>
 
-    <section class="workspace" aria-label="Experience bank and job matching">
+    <nav class="workspace-navigation" aria-label="Workspace views">
+      <button id="show-workspace" type="button" aria-controls="workspace-view" aria-pressed="true">Experience bank &amp; job matching</button>
+      <button id="show-current-cv" type="button" aria-controls="current-cv-view" aria-pressed="false">My Current CV</button>
+    </nav>
+
+    <section id="workspace-view" class="workspace" aria-label="Experience bank and job matching">
       <details id="bank-editor" class="bank-editor">
         <summary>Experience bank <span id="bank-summary">Loading…</span> <span id="bank-state" role="status"></span></summary>
       <form id="bank-form" class="panel" novalidate>
@@ -76,6 +82,49 @@
           <div id="recommendations"></div>
         </section>
         <details class="diagnostics"><summary>Full matching diagnostics</summary><p class="muted">Original analysis and matching responses, including all signals, explanations and ranking scores.</p><pre id="diagnostics"></pre></details>
+      </section>
+    </section>
+
+    <section id="current-cv-view" class="workspace" aria-labelledby="current-cv-title" hidden>
+      <form id="current-cv-form" class="panel" novalidate>
+        <div class="results-heading">
+          <div><p class="eyebrow">Your saved selections</p><h2 id="current-cv-title" tabindex="-1">My Current CV</h2></div>
+          <button id="save-current-cv" type="submit" disabled>Save Current CV</button>
+        </div>
+        <p class="muted">Choose from your saved experience bank. Unsaved bank edits are excluded. The preview follows your current selections; use Save Current CV to keep your changes.</p>
+        <p id="current-cv-state" role="status">Not loaded</p>
+        <div id="current-cv-message" class="message" role="status"></div>
+        <button id="retry-current-cv" class="secondary-button" type="button" hidden>Retry loading</button>
+        <div id="current-cv-warnings" class="notice" role="status" hidden></div>
+        <fieldset id="current-cv-fields" disabled>
+          <legend class="visually-hidden">Current CV selections</legend>
+          <section aria-labelledby="cv-work-title">
+            <h3 id="cv-work-title">Work Experience</h3>
+            <div id="cv-add-work"></div>
+            <div id="cv-work-list" class="editor-list"></div>
+          </section>
+          <section aria-labelledby="cv-project-title">
+            <h3 id="cv-project-title">Projects</h3>
+            <div id="cv-add-project"></div>
+            <div id="cv-project-list" class="editor-list"></div>
+          </section>
+          <section aria-labelledby="cv-skills-title">
+            <h3 id="cv-skills-title">Skills Groups</h3>
+            <p class="muted">Choose your own headings. Each skill can appear once across your CV.</p>
+            <div id="cv-add-skill-group"></div>
+            <div id="cv-skill-group-list" class="editor-list"></div>
+          </section>
+          <section aria-labelledby="cv-settings-title">
+            <h3 id="cv-settings-title">Tailoring Settings</h3>
+            <p class="muted">For future automated tailoring only. These limits do not change your manually selected content. Leave blank for no limit (unrestricted); zero excludes that content from future tailoring.</p>
+            <div id="cv-tailoring-settings" class="cv-settings-grid"></div>
+          </section>
+        </fieldset>
+      </form>
+      <section class="cv-preview" aria-labelledby="cv-preview-title">
+        <h2 id="cv-preview-title">Current CV Preview</h2>
+        <p class="muted">Read-only preview of your draft, using original wording from the saved bank.</p>
+        <div id="cv-preview-content"></div>
       </section>
     </section>
   </main>

@@ -171,3 +171,117 @@ class ExperienceBankMatch(BaseModel):
 
 class MatchRequest(BaseModel):
     job_analysis: JobDescriptionAnalysis
+
+
+def normalise_skill_key(value: str) -> str:
+    """Canonical skill identity, also used for skill group name comparisons."""
+    return " ".join(value.split()).lower()
+
+
+def _reject_current_cv_duplicates(values: list[str], label: str) -> None:
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            raise ValueError(f"Duplicate {label}: {value}")
+        seen.add(value)
+
+
+class _CurrentCVModel(BaseModel):
+    """Current CV rules only; existing experience-bank models are unchanged."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("work_experience_id", "project_id", "name", check_fields=False)
+    @classmethod
+    def reject_blank_values(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("IDs and skill group names must contain non-whitespace text.")
+        return value
+
+    @field_validator("achievement_ids", "contribution_ids", check_fields=False)
+    @classmethod
+    def validate_bullet_ids(cls, values: list[str]) -> list[str]:
+        if any(not value.strip() for value in values):
+            raise ValueError("Bullet IDs must contain non-whitespace text.")
+        _reject_current_cv_duplicates(values, "bullet ID")
+        return values
+
+
+class CurrentCVWorkSelection(_CurrentCVModel):
+    work_experience_id: str
+    achievement_ids: list[str] = Field(default_factory=list)
+
+
+class CurrentCVProjectSelection(_CurrentCVModel):
+    project_id: str
+    contribution_ids: list[str] = Field(default_factory=list)
+
+
+class CurrentCVSkillGroup(_CurrentCVModel):
+    name: str
+    skill_keys: list[str] = Field(default_factory=list)
+
+    @field_validator("skill_keys")
+    @classmethod
+    def validate_skill_keys(cls, values: list[str]) -> list[str]:
+        for value in values:
+            if not value.strip():
+                raise ValueError("Skill keys must contain non-whitespace text.")
+            if value != normalise_skill_key(value):
+                raise ValueError("Skill keys must be lowercase with normalised whitespace.")
+        _reject_current_cv_duplicates(values, "skill key")
+        return values
+
+
+class TailoringSettings(_CurrentCVModel):
+    max_achievements_per_role: int | None = Field(default=None, strict=True, ge=0)
+    max_contributions_per_project: int | None = Field(default=None, strict=True, ge=0)
+    max_projects: int | None = Field(default=None, strict=True, ge=0)
+    max_skills: int | None = Field(default=None, strict=True, ge=0)
+
+
+class CurrentCV(_CurrentCVModel):
+    schema_version: int = Field(default=1, strict=True, ge=1, le=1)
+    work_experience: list[CurrentCVWorkSelection] = Field(default_factory=list)
+    projects: list[CurrentCVProjectSelection] = Field(default_factory=list)
+    skill_groups: list[CurrentCVSkillGroup] = Field(default_factory=list)
+    tailoring_settings: TailoringSettings = Field(default_factory=TailoringSettings)
+
+    @model_validator(mode="after")
+    def reject_duplicate_selections(self) -> "CurrentCV":
+        _reject_current_cv_duplicates(
+            [item.work_experience_id for item in self.work_experience], "work experience ID"
+        )
+        _reject_current_cv_duplicates(
+            [item.project_id for item in self.projects], "project ID"
+        )
+        _reject_current_cv_duplicates(
+            [bullet_id for item in self.work_experience for bullet_id in item.achievement_ids]
+            + [bullet_id for item in self.projects for bullet_id in item.contribution_ids],
+            "bullet ID",
+        )
+        _reject_current_cv_duplicates(
+            [normalise_skill_key(group.name) for group in self.skill_groups],
+            "skill group name",
+        )
+        _reject_current_cv_duplicates(
+            [key for group in self.skill_groups for key in group.skill_keys], "skill key"
+        )
+        return self
+
+
+class CurrentCVReferenceIssue(BaseModel):
+    """A bank reference issue reported separately from the saved CV document."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    reference: str
+    reason: str
+
+
+class CurrentCVLoadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_cv: CurrentCV
+    reference_issues: list[CurrentCVReferenceIssue] = Field(default_factory=list)
