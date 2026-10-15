@@ -1,20 +1,28 @@
-# JobMatch CV Tailor — V3.1
+# JobMatch CV Tailor — V3.2
 
 JobMatch CV Tailor is a local FastAPI application for maintaining an experience
 bank, manually assembling a Current CV, and analysing job descriptions against
-the entire bank. V3.1 adds ordered CV selections, skills groups, future tailoring
-preferences and a live preview. Original achievements and contributions are
+the entire bank. V3.2 adds structured extraction, curated technical relationships
+and matching with evidence provenance. The Current CV builder retains ordered
+selections, skills groups, tailoring preferences and a live preview.
+Original achievements and contributions are
 selected by reference; the application does not generate or rewrite their text.
 
 ## Completed functionality
 
-- OpenAI extraction into five fields: job title, technical skills, other keywords,
-  responsibilities, and qualifications.
+- OpenAI extraction of structured job requirements, with Python-derived legacy
+  fields for job title, technical skills, other keywords, responsibilities and
+  qualifications. Requirement metadata includes importance, alternatives and
+  verified original source wording.
 - A browser editor for skills, work roles and achievements, projects and
   contributions, education, certifications, and additional evidence.
 - Validated, versioned JSON storage with an atomic file replacement on save.
 - Deterministic strong, related, and missing requirement classifications, plus
-  ranked evidence with source IDs and explanations.
+  ranked evidence with source IDs, signal origins, activity checks and explanations.
+- Explicit directional technical relationships, grouped OR alternatives and
+  required/preferred metadata, without a candidate compatibility score.
+- An isolated extraction evaluation harness with reviewed expectation fixtures,
+  prompt/model comparisons and opt-in live execution.
 - Nonblank input/output validation, bank ID uniqueness, rejection of unknown bank
   fields and unsupported versions, safe rendering of stored values, and a guard
   against saving before the bank has loaded.
@@ -177,26 +185,61 @@ CV, and does not load or require a valid previous CV file.
 
 ```json
 {
-  "job_description": "Software Engineer. Python and FastAPI experience. Work in an Agile team, build APIs, and write unit tests."
+  "job_description": "Software Engineer. Python or Java experience is required. AWS experience is preferred. Build APIs."
 }
 ```
 
 The description must contain 20–20,000 characters and must not be whitespace-only.
-The response has a nonblank `job_title` and four string lists:
+The response has a nonblank `job_title`, four compatible string lists, and an
+authoritative structured `requirements` list:
 
 ```json
 {
   "job_title": "Software Engineer",
-  "technical_skills": ["Python", "FastAPI", "unit testing"],
-  "other_keywords": ["Agile"],
+  "technical_skills": ["Python or Java", "AWS"],
+  "other_keywords": [],
   "responsibilities": ["Build APIs"],
-  "qualifications": []
+  "qualifications": [],
+  "requirements": [
+    {
+      "id": "r1",
+      "text": "Python or Java",
+      "source_text": "Python or Java experience is required.",
+      "category": "skill",
+      "importance": "required",
+      "alternatives": ["Python", "Java"],
+      "activity": null
+    },
+    {
+      "id": "r2",
+      "text": "AWS",
+      "source_text": "AWS experience is preferred.",
+      "category": "skill",
+      "importance": "preferred",
+      "alternatives": ["AWS"],
+      "activity": null
+    },
+    {
+      "id": "r3",
+      "text": "Build APIs",
+      "source_text": "Build APIs.",
+      "category": "responsibility",
+      "importance": "unspecified",
+      "alternatives": ["Build APIs"],
+      "activity": "api_development"
+    }
+  ]
 }
 ```
 
 This is illustrative; live extraction wording varies. Individual list entries
 cannot be blank, but empty lists are valid. The prompt preserves qualification
 alternatives together and keeps independently required qualifications separate.
+The provider generates only job title and structured requirements. Python assigns
+IDs, verifies quotations and derives the legacy lists. Unsupported source wording
+fails analysis with the existing generic 502 response. Legacy five-field analysis
+payloads remain accepted by `/match`; V3.2.4 adapts them through the same
+preparation service used for structured analyses.
 
 ### Match
 
@@ -218,10 +261,16 @@ The response contains `job_title`, `strong_matches`, `related_matches`,
 `missing_requirements`, and `ranked_evidence`. Requirement results contain their
 status, matching signals, evidence references, and explanation. Ranked records
 contain a rank, source reference, status, matched requirements, score, and
-explanation. There is no overall match percentage or hiring prediction.
+explanation. V3.2 additionally returns `requirement_details` (including ID,
+importance, source wording, alternatives and activity), `selected_alternative`
+and per-record `evidence_support`. Ranked records reuse those support decisions.
+Each support includes signal origin and, where relevant, the explicit directional
+relationship and demonstrated activity. Existing response fields remain available.
+There is no overall match percentage or hiring prediction.
 
 Invalid request bodies return 422. Caught analysis failures return 502. Bank
-read/write failures, including invalid stored bank data, return 503.
+read/write failures, including invalid stored bank data, return 503. An invalid
+technical relationship catalogue also causes `/match` to return a clear 503.
 
 ## Bank and matching rules
 
@@ -244,8 +293,9 @@ comma/pipe text-entry formats; review edits containing embedded delimiters.
 
 Roles/projects have their own tags. Child achievements/contributions use only
 their own tags, text, and outcomes; parent tags never propagate to children.
-Direct wording or explicit child tags can support strong matches. Standalone
-skills and parent declarations without direct wording are related. Explicit
+Demonstrated technical use can support strong matches. Standalone skills and
+local technology tags without demonstrated use are related, including child tags.
+Local capability tags may be backed by actual same-record activity. Explicit
 local capability denials override contradictory tags for that record.
 
 Matching uses bounded phrases and a small alias map, including API terminology,
@@ -259,6 +309,14 @@ Each evidence record earns 10 points per strong requirement and 3 per related
 requirement. Equal scores use relevant practical-activity priority, then
 descriptive support, then tag-only support, with bank order retained for remaining
 ties. Scores measure recognised coverage, not CV bullet quality or proficiency.
+
+- **Strong**: direct evidence or an approved broader relationship supports the
+  requested capability, with any explicit activity constraint demonstrated.
+  The explanation identifies partial aspects such as unproven API maintenance.
+- **Related**: transferable technology, declared knowledge or partial evidence
+  provides relevance without establishing the full requested experience.
+- **Missing**: no recognised supporting evidence satisfies the requirement and
+  its activity constraint. This does not prove the person lacks that experience.
 
 Banks saved with the earlier editor may contain copied parent tags. Review a
 backup copy and retain only child tags actually supported by that contribution.
@@ -369,7 +427,7 @@ and exported environment/global value files local. They may contain personal
 workspace identifiers or credentials. The ignore rules deliberately do not
 exclude request collections. `.env.example` contains no key and is safe to commit.
 
-## V3.1 limitations and release checks
+## Local storage and Current CV limitations
 
 - Intended for local, single-user use with one editing tab/process. Multiple
   tabs or concurrent API writes can overwrite each other's edits; there is no
@@ -402,20 +460,337 @@ temporary files are ignored and none are already tracked. The standard
 fictional `examples/experience_bank.example.json` remains eligible for Git.
 Commit source, tests and documentation only; do not force-add private files.
 
-## Retained V2 matching/editor limitations
+## Matching and editor limitations
 
 - Intended for local, single-user use. No authentication or concurrent-edit
   protection. Atomic replacement is not a backup or power-loss durability guarantee.
 - PUT is a full replacement. Education/certification renaming in the text editor
   can regenerate IDs. Dates and links have no semantic validation.
-- Qualification extraction is probabilistic. Matching does not interpret general
-  technology alternatives, required/preferred importance, or semantic duplicates.
+- Qualification extraction is probabilistic. Structured alternatives and
+  importance are preserved; ambiguous legacy alternatives remain conservative.
 - Complex negation, ambiguous degree wording, and joint multi-degree requirements
   are intentionally not fully interpreted. Phrase rules can miss valid evidence.
-- Strong support can be lexical or tag-based; it does not always demonstrate
-  practical proficiency. Missing evidence does not prove missing experience.
+- Strong support describes supported CV relevance, not measured proficiency.
+  Explicit activity constraints require demonstrated activity; unconstrained
+  capability wording can remain lexical. Missing evidence does not prove missing experience.
 - Match references omit dates and separate outcomes; the original bank retains them.
 - Dependency versions are currently unpinned; installations may differ over time.
 
-Overall evidence coverage, richer requirement relationships, CV generation,
-PDF/DOCX export, and multi-user storage are outside completed V2.
+Automated CV content selection, CV rewriting, PDF/DOCX export, and multi-user
+storage remain outside V3.2.
+
+## Technical relationship catalogue — V3.2.1
+
+`app/data/technical_relationships.json` is curated application configuration,
+independent of the user's experience bank and Current CV. The matcher loads and
+validates it before evaluating relationships; Current CV skill selection remains
+independent.
+The Git ignore rules allow this specific catalogue file while keeping other
+`app/data/` contents and saved user JSON files ignored.
+
+The JSON has three required sections: integer `schema_version: 1`, a `concepts`
+object keyed by stable identifiers, and a `relationships` list. The initial
+catalogue contains 11 concepts and 10 directed relationships covering Azure,
+Azure AI Search, AWS, cloud technologies, FastAPI, Python, API/backend development,
+Oracle Database, relational databases and SQL.
+
+Concept IDs are lowercase names with single spaces; letters, digits, `+`, `#`
+and `.` are supported so technologies such as C, C++ and C# remain distinct.
+Each concept has a `kind` of `technology` or `capability` and optional equivalent
+`aliases`. Resolution compares complete names with case-insensitive, collapsed
+whitespace while retaining punctuation and original alias text. Bare `Oracle`
+is deliberately not an alias for Oracle Database.
+
+Each relationship contains `from` and `to` concept IDs, `type` (`broader`,
+`transferable` or `uses_language`), `confidence` (`high` or `medium`) and optional
+`strong_when` (`technology_usage`, `api_development` or null). Confidence describes
+the curated relationship, not candidate proficiency or a compatibility score.
+`strong_when` records a condition for strong support during matching; null or omission
+means the relationship cannot establish strong support by itself. Conditions
+are permitted only for `broader` relationships and are never evaluated on load.
+No edge establishes deployment, cloud architecture or production operations.
+
+Use `load_technical_relationships()` from `app/services/technical_relationships.py`
+to load the checked-in catalogue, or supply a path to validate another file.
+`resolve_concept(name)` resolves exact IDs/aliases; `relationships_from(id)`
+returns only explicit outgoing edges in file order. Unknown IDs raise `KeyError`.
+Reverse edges and multi-hop relationships are never inferred. Azure-to-AWS and
+AWS-to-Azure are separately recorded transferable relationships, not aliases.
+For JSON serialization, use `catalogue.model_dump(by_alias=True)`.
+
+The loader raises `TechnicalRelationshipCatalogueError` with the path and cause
+for missing/unreadable files, malformed JSON, duplicate JSON keys, unsupported
+versions or values, alias collisions (including collisions with IDs), invalid
+endpoints, self-relationships and duplicate `(from, to, type)` edges. Changing
+confidence or conditions does not make a duplicate edge valid. Unknown fields
+are rejected at every level. Nothing silently falls back to an empty catalogue.
+
+Current CV skill keys and labels continue to come exclusively from explicit bank
+tags through `build_skill_catalogue()` and its frontend counterpart. Loading or
+querying technical relationships does not add inferred selectable skills, read
+user JSON stores or write either document. V3.2.4 evaluates the activity conditions
+against local bank evidence during matching.
+
+## Structured requirement preparation — V3.2.2
+
+`JobDescriptionAnalysis` still accepts and returns the original five fields.
+It additionally accepts an optional `requirements` list of `StructuredRequirement`
+records. An absent or null list preserves legacy behavior and is omitted from
+serialized responses; an explicitly empty list means there are no requirements.
+
+Each structured record has a nonblank `id`, `text` and `source_text`, a category
+(`skill`, `other_keyword`, `responsibility` or `qualification`), importance
+(`required`, `preferred` or `unspecified`), a nonempty ordered `alternatives` list
+and an optional controlled `activity`. Importance defaults to `unspecified`;
+activity defaults to null. Supported activities are `technology_usage`,
+`api_development` and `cloud_deployment`. Activities are constraints evaluated
+against evidence during matching; preparation does not infer them.
+
+For example, one grouped requirement can be supplied without legacy lists:
+
+```json
+{
+  "job_title": "Backend Engineer",
+  "requirements": [
+    {
+      "id": "r1",
+      "text": "Python or Java",
+      "source_text": "Experience with Python or Java is required.",
+      "category": "skill",
+      "importance": "required",
+      "alternatives": ["Python", "Java"],
+      "activity": null
+    }
+  ]
+}
+```
+
+Structured records are authoritative. Omitted legacy lists are derived by taking
+each record's `text` in order into its category's list. A grouped OR remains one
+display string; alternatives are never expanded into independent obligations.
+Explicitly supplied legacy lists must match this exact projection, including
+order, wording and empty categories, or validation fails. Separate Python and
+Java requirements use separate records. Unknown record fields, blank wording,
+empty alternatives, duplicate IDs (including whitespace variants), invalid
+categories/importance and unsupported activities are rejected. Source wording is
+preserved verbatim; this model alone cannot verify it against a job description.
+
+`prepare_requirements(job)` in `app/services/requirements.py` returns independent
+structured records without mutating the analysis. When the structured list is
+present, legacy lists are not prepared again. Equivalent concise aliases and
+flat OR groups are deduplicated, retaining the first record's ID, wording and
+alternative order. Category, importance, activity and substantive display
+qualifiers remain part of identity. Required/preferred AWS and AWS usage/deployment
+therefore remain distinct. The original analysis retains all source occurrences,
+including those whose prepared records were deduplicated.
+
+For legacy input, preparation follows V2 order: qualifications, technical skills,
+other keywords, then responsibilities. It reuses the matcher's existing exact
+alias canonicalisation and qualification-first, cross-category deduplication.
+IDs such as `legacy:technical_skills:1` are deterministic within that analysis.
+Importance is `unspecified`, activity is null and `source_text` is the available
+extracted string; the original job-description quote cannot be recovered.
+
+Only an explicit OR between complete names from a small technology allowlist is
+split (for example, Python or Java, or JS or TS). Unknown alternatives, slashes,
+conjunctions, qualifiers, responsibilities and qualifications retain their whole
+string as one opaque option. Degree alternatives and C#/.NET compounds retain
+their existing V2 interpretation. This is not a Boolean-expression parser.
+
+The matcher consumes prepared requirements for both structured and legacy
+requests, supplying catalogue-aware equivalent names.
+Preparation itself does not load or traverse relationships. Shared V2 terminology
+is in `app/services/matching_terms.py`, avoiding a circular matcher import.
+Current CV skill selection and saved
+JSON stores remain unaffected.
+
+## Structured job extraction — V3.2.3
+
+An isolated [extraction evaluation harness](evaluations/extraction/README.md)
+compares the current prompt, a shorter prompt and explicitly selected compatible
+models against three reviewed expectation fixtures. It defaults to an offline
+plan; live requests require --live. Reports include named requirement errors,
+provider content, Python projection, model/prompt metadata and token usage.
+This tooling does not change production extraction or matching.
+
+`analyse_job_description_with_llm()` now requests `JobDescriptionExtraction`,
+containing only `job_title` and `requirements`. Each `ExtractedRequirement` shares
+the existing requirement content validation, has explicit importance and nullable
+activity, and contains no ID. Unknown fields, including independently generated
+legacy lists or IDs, are rejected. The existing OpenAI model configuration and
+Chat Completions parsing API are retained.
+
+The prompt marks required/preferred only from explicit wording or a clear
+requirements-section heading; otherwise importance is unspecified. Duties remain
+responsibilities rather than invented required prior experience. Simple OR options
+stay grouped; independent AND obligations are separate. Complete degree branches
+retain their level/subject pairs. Shared or nested ambiguous alternatives retain
+full original wording as one opaque option. Activities must be explicitly
+expressed; a bare Azure or cloud mention cannot imply cloud deployment. If a job
+title is not stated, the prompt uses `Unspecified role`.
+
+Following manual extraction review, the prompt asks for coverage of every
+paragraph and sentence, including future duties in introductory role descriptions
+and `You will` paragraphs. Desirable or nonessential requirements must not be
+omitted; explicit preference wording determines preferred importance. Distinct
+duties in a shared sentence stay separate, while actions linked by purpose stay
+combined. Multiple alternatives require genuine source-supported OR choices;
+each other requirement has one complete meaningful option. A concise example
+contrasts Python/Java choices with collaborating to design software solutions.
+Activities must describe the specific requirement's own action and be supported
+by its own `source_text`; another sentence, paragraph or duty in a shared quotation
+cannot supply an activity. Preferred AWS/Azure experience retains null activity
+when its quote does not express an activity; separately stated cloud deployment
+is a responsibility, without inventing required previous deployment experience.
+These are prompt instructions, not a new semantic validator; mocked regression
+tests verify application contracts, and live model quality still needs manual
+verification.
+
+`analysis_from_extraction()` in `app/services/job_extraction.py` verifies quotations,
+assigns `r1`, `r2`, etc. in provider order, and constructs `JobDescriptionAnalysis`.
+Its existing projection derives the four legacy lists using each requirement's
+display text and category, preserving order and grouped alternatives. There is
+no separate legacy generation or source-occurrence deduplication. Extraction does
+not evaluate bank evidence.
+IDs are deterministic for the same ordered extraction, not guaranteed across
+different model interpretations of the same description.
+
+Source verification requires a contiguous sequence of original-input tokens.
+Case, whitespace, typographic apostrophes and separating punctuation can differ;
+technical punctuation such as C/C++/C#, .NET, Node.js and version numbers is retained.
+Words cannot be reordered or omitted inside a quotation, OR cannot become AND,
+and paraphrases or fabricated quotations have no fuzzy fallback. Exact quotes
+are preserved; formatting-tolerant matches return an actual original-input span.
+An unverified quote fails the whole analysis through `LLMServiceError` and the
+existing generic 502 response; no partial response or guessed quotation is saved.
+
+This check establishes lexical provenance, not whether the model interpreted
+importance, category, alternatives or activities correctly, or captured enough
+context around a quoted fragment. Repeated wording under different headings can
+still be ambiguous. The extraction prompt asks for sufficient context, but manual
+review of representative real descriptions remains necessary. Automated tests use
+mocked OpenAI outputs; they do not assess live model extraction quality or make
+provider calls. Matching evaluates the resulting analysis separately from
+extraction and does not change the Current CV or frontend.
+
+### Diagnosing analysis failures
+
+The HTTP response remains the generic 502 message. The server now emits a
+`Job analysis failed` warning identifying configuration, provider, provider-response,
+structured-validation or source-validation failures. Provider status and known
+error codes/parameter names, schema field paths/error types, or an analysis-local
+requirement ID identify the failed step. The warnings exclude job-description
+text, extracted quotations, keys, provider bodies and exception tracebacks.
+
+For example, `stage=source_validation ... requirement_id=r6` means the sixth
+extracted quotation failed the existing contiguous-source check. It does not
+prove a provider outage or justify accepting invented wording. After a 502,
+inspect the accompanying warning rather than only the Uvicorn access-log line.
+No retry, partial-analysis fallback or relaxed validation is introduced.
+
+## Matching integration — V3.2.4
+
+match_experience_bank() loads the validated catalogue and calls
+prepare_requirements(). A present structured list, including an empty one, is
+authoritative; legacy lists are never matched independently as extra obligations.
+Legacy five-field requests are adapted conservatively. Qualifications keep their
+legacy precedence, and aliases still deduplicate without collapsing different
+importance, category, activity or substantive display qualifiers.
+
+Each requirement is evaluated per evidence record and per OR alternative. The
+strongest supported alternative is retained for that record. Demonstrated,
+relevant activity takes precedence over declarations within the same status;
+otherwise ties keep option order. One result is returned for the whole group, with no missing results for
+unused choices. Separate AND records remain independent. Each evidence record
+earns at most one existing 10/3-point reward per prepared requirement. Importance
+is metadata and does not change the weights. Scores are internal evidence
+coverage, not a candidate/job compatibility score.
+
+_direct_decision() preserves V2 phrase aliases, token boundaries, denials,
+testing/testability, LLM-integration and compound/qualification protections.
+Technology wording without actual use, and explicit local technology tags
+without supporting wording, are related rather than strong. Tags are retained
+unchanged. This intentionally tightens the old child-tag classification.
+Capability tags can have strong support when the same record actually demonstrates
+the capability; a backend tag on a frontend-only bullet remains related.
+
+_relationship_decision() follows only explicit outgoing edges from observed
+concepts to the requested concept. Transferable and uses-language edges are
+always related. A broader edge becomes strong only with its approved same-record
+activity condition. Relationship confidence remains catalogue metadata. No edge
+establishes deployment, architecture or production operations.
+
+Azure AI Search is not an alias for Azure. The Azure name inside that service can
+provide scoped, related wording support for an Azure alternative. Practical
+service use supports general cloud technologies through the explicit broader
+edge. The catalogue has no Azure AI Search → Azure → AWS traversal: service usage
+alone does not establish AWS relevance via an invented chain.
+
+matching_activity.py splits positive local action/object clauses and checks the
+three controlled activities. Technology use needs the specific name in positive
+usage wording. API development requires building/designing/implementing/maintaining
+APIs, rather than consuming an API, building a client or maintaining documentation.
+Cloud deployment requires a completed application/service deployment and an
+explicit cloud destination. Activity and technology/destination cannot be borrowed
+from separate clauses, outcomes or unrelated records. A named-platform deployment
+can supply related activity relevance through an explicit transferable edge,
+without claiming that the requested platform was used.
+
+An explicit activity constraint with no supporting activity is missing, even
+when a technology tag exists. Credentials provide knowledge relevance for
+unconstrained technical requirements and suitable support for formal qualification
+requirements; they cannot establish engineering activity. Degree alternatives
+retain their level/subject pairings and require education evidence; named
+professional certifications require certification evidence.
+
+Signal origins distinguish original wording, outcomes, standalone skills, local
+skill/technology tags and credentials. Evidence references retain source type,
+record ID and label, distinguishing achievements, project contributions, parent
+descriptions, education and certifications. Parent claims never propagate to
+children. EvidenceSupport is reused in requirement and ranked-evidence outputs,
+so scores and explanations follow the same per-requirement decisions.
+
+The controlled seven-requirement GPT-5.4 regression uses fictional bank records.
+It verifies Python OR Java, practical Oracle Database → relational database support,
+Azure as the selected cloud alternative, separate future duties and the existing
+BSc Computer Science qualification match. Tests exercise weaker declarations,
+credentials, unsupported activities, directionality and multi-hop rejection too.
+No live provider call or saved-user-data migration is involved.
+
+Limits remain explicit: phrase/activity rules are deliberately conservative,
+unfamiliar phrasing can be missed, only curated relationships apply, and complex
+Boolean requirements, general qualification equivalence and natural-language
+negation are not fully parsed. No CV content selection, rewriting, exports,
+frontend redesign, new persistence or inferred selectable CV skills are included.
+
+### Matching-quality improvements — V3.2.5
+
+Completed SQL stored-procedure development in Oracle is recognised as explicit
+database work even when the sentence uses the shorter vendor name. This narrow
+contextual rule requires a development action, a database artifact and Oracle
+in the same positive clause. It supplies wording provenance for the existing
+Oracle Database → relational databases edge and its technology_usage condition.
+It does not add a global Oracle alias or promote tag-only or credential evidence.
+SQL itself is direct language evidence only when stated in the development wording;
+the uses-language edge alone remains related.
+
+For a simple development-and-maintenance API responsibility, demonstrated API
+development provides strong CV relevance to the main development capability.
+The explanation explicitly says when API maintenance is not established, and
+the supporting signal records API development rather than the complete unproven
+duty. Maintenance-only requirements and extra quality claims are not upgraded.
+The same behavior applies to structured responsibilities and legacy strings.
+Production API endpoints are recognised as API objects; this does not imply
+cloud deployment.
+
+Collaboration and software design in separate records are not combined into
+collaborative design. Generic Agile wording, job titles and team membership
+cannot establish that combined responsibility. Local Python technology tags
+remain related discovery signals. Future CV selection must distinguish those
+declarations from demonstrated achievements and avoid repetitive tag-driven
+content; this review does not change ranking weights or implement selection.
+
+The completed manual review of the seven-requirement description against the
+reviewed Experience Bank produced 4 strong, 1 related and 2 missing requirements.
+That result depends on the recorded bank evidence; it is not a universal expected
+result for other banks or a guarantee of future live extraction quality.

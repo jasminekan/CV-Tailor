@@ -23,6 +23,9 @@ junit.xml
 .tox/
 .nox/
 
+# Local extraction evaluation reports; keep the harness and fixtures tracked.
+/evaluations/extraction/reports/
+
 # Environment and secrets
 .env
 .env.*
@@ -49,6 +52,11 @@ dist/
 data/
 experience_bank.json
 current_cv.json
+
+# Curated application configuration; keep other data files private.
+!app/data/
+app/data/*
+!app/data/technical_relationships.json
 
 # Postman workspace bindings and local variable values
 # Keep sanitised request collections eligible for version control.

@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "software_engineer_intro",
+      "review_notes": "Seven expectations from the user's controlled manual-review description. Introductory API work is a future duty; cloud platform preference has no deployment activity. The degree may remain opaque or use two complete, same-level subject branches.",
+      "job_title": "Software Engineer",
+      "job_description": "We are hiring a Software Engineer to develop and maintain backend APIs.\n\nCandidates must have experience with Python or Java and relational databases.\n\nExperience with AWS or Azure is desirable but not essential.\n\nYou will collaborate with engineers to design software solutions and deploy applications to cloud infrastructure.\n\nA Bachelor's degree in Computer Science or a related field is preferred.",
+      "expected": [
+        {
+          "id": "backend_api_duty", "text": "Develop and maintain backend APIs",
+          "source_text": "We are hiring a Software Engineer to develop and maintain backend APIs.",
+          "category": "responsibility", "importance": "unspecified", "activity": "api_development",
+          "alternatives": ["Develop and maintain backend APIs"],
+          "match_terms": [["develop", "developing"], ["maintain", "maintaining"], ["backend"], ["APIs", "API"]]
+        },
+        {
+          "id": "language_or", "text": "Python or Java",
+          "source_text": "Candidates must have experience with Python or Java and relational databases.",
+          "category": "skill", "importance": "required", "activity": null,
+          "alternatives": ["Python", "Java"], "match_terms": [["Python"], ["Java"]]
+        },
+        {
+          "id": "relational_databases", "text": "Relational databases",
+          "source_text": "Candidates must have experience with Python or Java and relational databases.",
+          "category": "skill", "importance": "required", "activity": null,
+          "alternatives": ["relational databases"], "match_terms": [["relational databases", "relational database"]],
+          "option_aliases": {"relational databases": ["relational database", "Experience with relational databases"]}
+        },
+        {
+          "id": "cloud_or", "text": "AWS or Azure",
+          "source_text": "Experience with AWS or Azure is desirable but not essential.",
+          "category": "skill", "importance": "preferred", "activity": null,
+          "alternatives": ["AWS", "Azure"], "match_terms": [["AWS", "Amazon Web Services"], ["Azure", "Microsoft Azure"]],
+          "option_aliases": {"AWS": ["Amazon Web Services"], "Azure": ["Microsoft Azure"]}
+        },
+        {
+          "id": "collaborative_design", "text": "Collaborate with engineers to design software solutions",
+          "source_text": "You will collaborate with engineers to design software solutions and deploy applications to cloud infrastructure.",
+          "category": "responsibility", "importance": "unspecified", "activity": null,
+          "alternatives": ["Collaborate with engineers to design software solutions"],
+          "match_terms": [["collaborate", "collaborating"], ["engineers"], ["design", "designing"], ["software solutions"]]
+        },
+        {
+          "id": "cloud_deployment_duty", "text": "Deploy applications to cloud infrastructure",
+          "source_text": "You will collaborate with engineers to design software solutions and deploy applications to cloud infrastructure.",
+          "category": "responsibility", "importance": "unspecified", "activity": "cloud_deployment",
+          "alternatives": ["Deploy applications to cloud infrastructure"],
+          "match_terms": [["deploy", "deploying", "deployment"], ["applications"], ["cloud infrastructure"]]
+        },
+        {
+          "id": "preferred_degree", "text": "Bachelor's degree in Computer Science or a related field",
+          "source_text": "A Bachelor's degree in Computer Science or a related field is preferred.",
+          "category": "qualification", "importance": "preferred", "activity": null,
+          "alternatives": ["Bachelor's degree in Computer Science or a related field"],
+          "match_terms": [["Bachelor's", "Bachelor"], ["Computer Science"], ["related field"]],
+          "accepted_alternative_sets": [["Bachelor's degree in Computer Science", "Bachelor's degree in a related field"]],
+          "option_aliases": {"Bachelor's degree in Computer Science or a related field": ["A Bachelor's degree in Computer Science or a related field"]}
+        }
+      ]
+    },
+    {
+      "id": "backend_independent_languages",
+      "review_notes": "Authored and checked against explicit required/preferred headings. Python AND Java are two independent skills. Oracle usage is explicit. Building APIs and writing tests are separate future duties. Degree levels remain paired with their stated subjects.",
+      "job_title": "Backend Engineer",
+      "job_description": "Backend Engineer\n\nRequired experience: Python and Java. Experience using Oracle Database is required.\n\nPreferred: FastAPI.\n\nYou will build backend APIs and write automated tests.\n\nA BSc in Engineering or an MSc in Computer Science is required.",
+      "expected": [
+        {
+          "id": "python_required", "text": "Python",
+          "source_text": "Required experience: Python and Java.",
+          "category": "skill", "importance": "required", "activity": null,
+          "alternatives": ["Python"], "match_terms": [["Python"]],
+          "option_aliases": {"Python": ["Python experience", "Experience with Python"]}
+        },
+        {
+          "id": "java_required", "text": "Java",
+          "source_text": "Required experience: Python and Java.",
+          "category": "skill", "importance": "required", "activity": null,
+          "alternatives": ["Java"], "match_terms": [["Java"]],
+          "option_aliases": {"Java": ["Java experience", "Experience with Java"]}
+        },
+        {
+          "id": "oracle_usage", "text": "Experience using Oracle Database",
+          "source_text": "Experience using Oracle Database is required.",
+          "category": "skill", "importance": "required", "activity": "technology_usage",
+          "alternatives": ["Oracle Database"], "match_terms": [["Oracle Database"]],
+          "option_aliases": {"Oracle Database": ["Experience using Oracle Database"]}
+        },
+        {
+          "id": "fastapi_preferred", "text": "FastAPI",
+          "source_text": "Preferred: FastAPI.",
+          "category": "skill", "importance": "preferred", "activity": null,
+          "alternatives": ["FastAPI"], "match_terms": [["FastAPI"]]
+        },
+        {
+          "id": "api_building_duty", "text": "Build backend APIs",
+          "source_text": "You will build backend APIs and write automated tests.",
+          "category": "responsibility", "importance": "unspecified", "activity": "api_development",
+          "alternatives": ["Build backend APIs"], "match_terms": [["build", "building"], ["backend"], ["APIs", "API"]]
+        },
+        {
+          "id": "testing_duty", "text": "Write automated tests",
+          "source_text": "You will build backend APIs and write automated tests.",
+          "category": "responsibility", "importance": "unspecified", "activity": null,
+          "alternatives": ["Write automated tests"], "match_terms": [["write", "writing"], ["automated tests"]]
+        },
+        {
+          "id": "degree_branches", "text": "BSc in Engineering or MSc in Computer Science",
+          "source_text": "A BSc in Engineering or an MSc in Computer Science is required.",
+          "category": "qualification", "importance": "required", "activity": null,
+          "alternatives": ["BSc in Engineering", "MSc in Computer Science"],
+          "match_terms": [["BSc", "Bachelor's"], ["Engineering"], ["MSc", "Master's"], ["Computer Science"]],
+          "option_aliases": {"BSc in Engineering": ["A BSc in Engineering", "Bachelor's degree in Engineering"], "MSc in Computer Science": ["An MSc in Computer Science", "Master's degree in Computer Science"]}
+        }
+      ]
+    },
+    {
+      "id": "full_stack_search_and_cloud",
+      "review_notes": "Authored and checked against explicit source wording. Introductory web-interface and service-maintenance duties remain separate. Azure AI Search usage is not cloud deployment; only the final deployment duty has that activity. Communication is a nontechnical requirement, and certification is a preferred formal qualification.",
+      "job_title": "Full Stack Engineer",
+      "job_description": "We are hiring a Full Stack Engineer to build web interfaces and maintain application services.\n\nProficiency in JavaScript or TypeScript is required. Experience using Azure AI Search is required.\n\nAWS or Azure experience is preferred.\n\nClear communication is required. A recognised cloud certification is desirable.\n\nYou will deploy applications to cloud infrastructure.",
+      "expected": [
+        {
+          "id": "web_interface_duty", "text": "Build web interfaces",
+          "source_text": "We are hiring a Full Stack Engineer to build web interfaces and maintain application services.",
+          "category": "responsibility", "importance": "unspecified", "activity": null,
+          "alternatives": ["Build web interfaces"], "match_terms": [["build", "building"], ["web interfaces", "web interface"]]
+        },
+        {
+          "id": "service_maintenance_duty", "text": "Maintain application services",
+          "source_text": "We are hiring a Full Stack Engineer to build web interfaces and maintain application services.",
+          "category": "responsibility", "importance": "unspecified", "activity": null,
+          "alternatives": ["Maintain application services"], "match_terms": [["maintain", "maintaining"], ["application services"]]
+        },
+        {
+          "id": "web_language_or", "text": "JavaScript or TypeScript",
+          "source_text": "Proficiency in JavaScript or TypeScript is required.",
+          "category": "skill", "importance": "required", "activity": null,
+          "alternatives": ["JavaScript", "TypeScript"], "match_terms": [["JavaScript", "JS"], ["TypeScript", "TS"]],
+          "option_aliases": {"JavaScript": ["JS"], "TypeScript": ["TS"]}
+        },
+        {
+          "id": "search_usage", "text": "Experience using Azure AI Search",
+          "source_text": "Experience using Azure AI Search is required.",
+          "category": "skill", "importance": "required", "activity": "technology_usage",
+          "alternatives": ["Azure AI Search"], "match_terms": [["Azure AI Search"]],
+          "option_aliases": {"Azure AI Search": ["Experience using Azure AI Search"]}
+        },
+        {
+          "id": "cloud_preference", "text": "AWS or Azure",
+          "source_text": "AWS or Azure experience is preferred.",
+          "category": "skill", "importance": "preferred", "activity": null,
+          "alternatives": ["AWS", "Azure"], "match_terms": [["AWS", "Amazon Web Services"], ["Azure", "Microsoft Azure"]],
+          "option_aliases": {"AWS": ["Amazon Web Services"], "Azure": ["Microsoft Azure"]}
+        },
+        {
+          "id": "communication_required", "text": "Clear communication",
+          "source_text": "Clear communication is required.",
+          "category": "other_keyword", "importance": "required", "activity": null,
+          "alternatives": ["Clear communication"], "match_terms": [["communication"]],
+          "option_aliases": {"Clear communication": ["Communication"]}
+        },
+        {
+          "id": "certification_preferred", "text": "Recognised cloud certification",
+          "source_text": "A recognised cloud certification is desirable.",
+          "category": "qualification", "importance": "preferred", "activity": null,
+          "alternatives": ["Recognised cloud certification"], "match_terms": [["cloud certification"]],
+          "option_aliases": {"Recognised cloud certification": ["A recognised cloud certification", "Cloud certification"]}
+        },
+        {
+          "id": "deployment_duty", "text": "Deploy applications to cloud infrastructure",
+          "source_text": "You will deploy applications to cloud infrastructure.",
+          "category": "responsibility", "importance": "unspecified", "activity": "cloud_deployment",
+          "alternatives": ["Deploy applications to cloud infrastructure"],
+          "match_terms": [["deploy", "deploying", "deployment"], ["applications"], ["cloud infrastructure"]]
+        }
+      ]
+    }
+  ]
+}

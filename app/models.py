@@ -1,6 +1,10 @@
+from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler,
+    field_validator, model_serializer, model_validator,
+)
 
 
 class JobDescriptionRequest(BaseModel):
@@ -18,7 +22,84 @@ class JobDescriptionRequest(BaseModel):
         return value
 
 
-class JobDescriptionAnalysis(BaseModel):
+RequirementCategory = Literal["skill", "other_keyword", "responsibility", "qualification"]
+RequirementImportance = Literal["required", "preferred", "unspecified"]
+RequirementActivity = Literal["technology_usage", "api_development", "cloud_deployment"]
+
+REQUIREMENT_CATEGORY_FIELDS = {
+    "skill": "technical_skills",
+    "other_keyword": "other_keywords",
+    "responsibility": "responsibilities",
+    "qualification": "qualifications",
+}
+
+
+class _RequirementContent(BaseModel):
+    """Shared validation for extracted and analysis-local requirement records."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    text: str
+    source_text: str
+    category: RequirementCategory
+    importance: RequirementImportance = "unspecified"
+    alternatives: list[str] = Field(min_length=1)
+    activity: RequirementActivity | None = None
+
+    @field_validator("text", "source_text")
+    @classmethod
+    def reject_blank_values(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Requirement wording must contain non-whitespace text.")
+        return value
+
+    @field_validator("alternatives")
+    @classmethod
+    def reject_blank_alternatives(cls, values: list[str]) -> list[str]:
+        if any(not value.strip() for value in values):
+            raise ValueError("Requirement alternatives must contain non-whitespace text.")
+        return values
+
+
+class StructuredRequirement(_RequirementContent):
+    """One obligation: alternatives are OR; separate records are independent."""
+
+    id: str
+
+    @field_validator("id")
+    @classmethod
+    def reject_blank_id(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Requirement IDs must contain non-whitespace text.")
+        return value
+
+
+class ExtractedRequirement(_RequirementContent):
+    """Provider content only: Python assigns IDs; metadata must be explicit."""
+
+    importance: RequirementImportance
+    activity: RequirementActivity | None
+
+
+class JobDescriptionExtraction(BaseModel):
+    """A single authoritative provider response, without legacy lists or IDs."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    job_title: str
+    requirements: list[ExtractedRequirement]
+
+    @field_validator("job_title")
+    @classmethod
+    def reject_blank_title(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Job title must contain non-whitespace text.")
+        return value
+
+
+class LegacyJobDescriptionAnalysis(BaseModel):
+    """The retained five-field representation for older analysis consumers."""
+
     job_title: str
     technical_skills: list[str] = Field(default_factory=list)
     other_keywords: list[str] = Field(default_factory=list)
@@ -40,6 +121,43 @@ class JobDescriptionAnalysis(BaseModel):
         if any(not value.strip() for value in values):
             raise ValueError("Analysis entries must contain non-whitespace text.")
         return values
+
+
+class JobDescriptionAnalysis(LegacyJobDescriptionAnalysis):
+    requirements: list[StructuredRequirement] | None = Field(default=None, strict=True)
+
+    @model_validator(mode="after")
+    def project_structured_requirements(self) -> "JobDescriptionAnalysis":
+        if self.requirements is None:
+            return self
+        projected: dict[str, list[str]] = {
+            field: [] for field in REQUIREMENT_CATEGORY_FIELDS.values()
+        }
+        seen: set[str] = set()
+        for requirement in self.requirements:
+            # Whitespace around an ID must not evade duplicate detection.
+            key = requirement.id.strip()
+            if key in seen:
+                raise ValueError(f"Duplicate requirement ID: {requirement.id!r}")
+            seen.add(key)
+            projected[REQUIREMENT_CATEGORY_FIELDS[requirement.category]].append(requirement.text)
+        for field, values in projected.items():
+            if field in self.model_fields_set and getattr(self, field) != values:
+                raise ValueError(
+                    f"{field} contradicts structured requirements; omit it or supply "
+                    "the exact ordered requirement text for its category."
+                )
+            setattr(self, field, values)
+        return self
+
+    @model_serializer(mode="wrap")
+    def omit_absent_requirements(self, handler: SerializerFunctionWrapHandler):
+        """Legacy responses retain their exact five-field shape, not a new null."""
+        # An explicit dict return type would erase field details in output schemas.
+        result = handler(self)
+        if self.requirements is None:
+            result.pop("requirements", None)
+        return result
 
 
 class _BankModel(BaseModel):
@@ -144,12 +262,38 @@ class EvidenceReference(BaseModel):
     text: str
 
 
+class RelationshipReference(BaseModel):
+    source: str
+    target: str
+    type: Literal["broader", "transferable", "uses_language"]
+    confidence: Literal["high", "medium"]
+
+
+class MatchingSignal(BaseModel):
+    signal: str
+    origin: Literal["wording", "outcome", "standalone_skill", "skill_tag", "technology_tag", "credential"]
+    relationship: RelationshipReference | None = None
+    demonstrated_activity: RequirementActivity | None = None
+
+
+class EvidenceSupport(BaseModel):
+    requirement_id: str
+    evidence_id: str
+    status: Literal["strong", "related"]
+    selected_alternative: str
+    signals: list[MatchingSignal] = Field(default_factory=list)
+    explanation: str
+
+
 class MatchResult(BaseModel):
     requirement: str
     status: str
     matched_signals: list[str] = Field(default_factory=list)
     evidence: list[EvidenceReference] = Field(default_factory=list)
     explanation: str
+    requirement_details: StructuredRequirement | None = None
+    selected_alternative: str | None = None
+    evidence_support: list[EvidenceSupport] = Field(default_factory=list)
 
 
 class RankedEvidence(BaseModel):
@@ -159,6 +303,7 @@ class RankedEvidence(BaseModel):
     matched_signals: list[str] = Field(default_factory=list)
     score: int = Field(ge=0)
     explanation: str
+    evidence_support: list[EvidenceSupport] = Field(default_factory=list)
 
 
 class ExperienceBankMatch(BaseModel):

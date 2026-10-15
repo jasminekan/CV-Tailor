@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "concepts": {
+    "azure": {
+      "kind": "technology",
+      "aliases": ["Microsoft Azure"]
+    },
+    "aws": {
+      "kind": "technology",
+      "aliases": ["Amazon Web Services"]
+    },
+    "azure ai search": {
+      "kind": "technology",
+      "aliases": []
+    },
+    "cloud technology": {
+      "kind": "capability",
+      "aliases": ["cloud platforms", "cloud technologies"]
+    },
+    "fastapi": {
+      "kind": "technology",
+      "aliases": []
+    },
+    "python": {
+      "kind": "technology",
+      "aliases": []
+    },
+    "api development": {
+      "kind": "capability",
+      "aliases": []
+    },
+    "backend development": {
+      "kind": "capability",
+      "aliases": []
+    },
+    "oracle database": {
+      "kind": "technology",
+      "aliases": []
+    },
+    "relational databases": {
+      "kind": "capability",
+      "aliases": []
+    },
+    "sql": {
+      "kind": "technology",
+      "aliases": ["Structured Query Language"]
+    }
+  },
+  "relationships": [
+    {
+      "from": "azure",
+      "to": "cloud technology",
+      "type": "broader",
+      "confidence": "high",
+      "strong_when": "technology_usage"
+    },
+    {
+      "from": "aws",
+      "to": "cloud technology",
+      "type": "broader",
+      "confidence": "high",
+      "strong_when": "technology_usage"
+    },
+    {
+      "from": "azure ai search",
+      "to": "cloud technology",
+      "type": "broader",
+      "confidence": "high",
+      "strong_when": "technology_usage"
+    },
+    {
+      "from": "azure",
+      "to": "aws",
+      "type": "transferable",
+      "confidence": "medium",
+      "strong_when": null
+    },
+    {
+      "from": "aws",
+      "to": "azure",
+      "type": "transferable",
+      "confidence": "medium",
+      "strong_when": null
+    },
+    {
+      "from": "fastapi",
+      "to": "python",
+      "type": "uses_language",
+      "confidence": "high",
+      "strong_when": null
+    },
+    {
+      "from": "fastapi",
+      "to": "api development",
+      "type": "broader",
+      "confidence": "high",
+      "strong_when": "api_development"
+    },
+    {
+      "from": "fastapi",
+      "to": "backend development",
+      "type": "broader",
+      "confidence": "high",
+      "strong_when": "api_development"
+    },
+    {
+      "from": "oracle database",
+      "to": "relational databases",
+      "type": "broader",
+      "confidence": "high",
+      "strong_when": "technology_usage"
+    },
+    {
+      "from": "oracle database",
+      "to": "sql",
+      "type": "uses_language",
+      "confidence": "high",
+      "strong_when": null
+    }
+  ]
+}

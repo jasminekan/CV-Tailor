@@ -168,7 +168,8 @@ def test_local_tags_and_outcomes_are_preserved_and_matched():
     bank = ExperienceBank(additional_evidence=[item])
     before = bank.model_dump()
     result = match(bank, technical_skills=["Python", "automated testing"])
-    assert len(result.strong_matches) == 2
+    assert [item.requirement for item in result.strong_matches] == ["automated testing"]
+    assert [item.requirement for item in result.related_matches] == ["Python"]
     assert bank.model_dump() == before
 
 
@@ -255,8 +256,9 @@ def test_existing_copied_tags_are_not_silently_removed():
     )])
     before = bank.model_dump_json()
     result = match(bank, technical_skills=["backend development"])
-    # Provenance is absent: an explicit child claim is retained until reviewed.
-    assert result.strong_matches
+    # The explicit child declaration remains relevant, without proving backend work.
+    assert result.related_matches
+    assert not result.strong_matches
     assert bank.model_dump_json() == before
 
 

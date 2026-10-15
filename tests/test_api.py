@@ -94,6 +94,46 @@ def test_analyse_returns_502_when_llm_fails(
     }
 
 
+def test_analyse_exposes_real_structured_service_with_compatible_legacy_fields(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.models import JobDescriptionExtraction
+    from app.services import llm
+
+    source = "Backend Engineer. Python or Java is required. AWS is preferred."
+    parsed = {
+        "job_title": "Backend Engineer",
+        "requirements": [
+            {"text": "Python or Java", "source_text": "Python or Java is required.",
+             "category": "skill", "importance": "required", "alternatives": ["Python", "Java"],
+             "activity": None},
+            {"text": "AWS", "source_text": "AWS is preferred.", "category": "skill",
+             "importance": "preferred", "alternatives": ["AWS"], "activity": None},
+        ],
+    }
+    captured = []
+
+    def parse(**kwargs):
+        captured.append(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(parsed=parsed, refusal=None))])
+
+    monkeypatch.setattr(llm, "Settings", lambda: SimpleNamespace(openai_api_key="test-key", openai_model="test-model"))
+    monkeypatch.setattr(llm, "OpenAI", lambda api_key: SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(parse=parse)),
+    ))
+    response = client.post("/analyse", json={"job_description": source})
+    assert response.status_code == 200
+    result = response.json()
+    assert result["job_title"] == "Backend Engineer"
+    assert result["technical_skills"] == ["Python or Java", "AWS"]
+    assert result["other_keywords"] == result["responsibilities"] == result["qualifications"] == []
+    assert [item["id"] for item in result["requirements"]] == ["r1", "r2"]
+    assert [item["importance"] for item in result["requirements"]] == ["required", "preferred"]
+    assert result["requirements"][0]["alternatives"] == ["Python", "Java"]
+    assert result["requirements"][0]["source_text"] == "Python or Java is required."
+    assert captured[0]["response_format"] is JobDescriptionExtraction
+
+
 def test_analyse_rejects_short_job_description() -> None:
     response = client.post(
         "/analyse",
