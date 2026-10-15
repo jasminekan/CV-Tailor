@@ -1,96 +1,34 @@
 """Deterministic matching of local evidence, without inheriting parent claims."""
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 
 from app.models import (
     EvidenceReference,
+    EvidenceSupport,
     ExperienceBank,
     ExperienceBankMatch,
     JobDescriptionAnalysis,
     MatchResult,
+    MatchingSignal,
     RankedEvidence,
+    RelationshipReference,
+    StructuredRequirement,
 )
-
-
-def _normalise(value: str) -> str:
-    value = value.lower().replace("’", "'")
-    value = re.sub(r"\b(bachelor|master)'s\b", r"\1s", value)
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9+#.]", " ", value)).strip().rstrip(".")
-
-
-# Equivalences only. Broader support is kept separate below.
-_CONCEPTS = {
-    "javascript": ("javascript", "js"),
-    "typescript": ("typescript", "ts"),
-    "postgresql": ("postgresql", "postgres"),
-    "api development": (
-        "api development",
-        "api design",
-        "api endpoint",
-        "api endpoints",
-        "rest api",
-        "rest apis"
-    ),
-    "backend development": ("backend development", "back end development", "backend"),
-    "full stack development": (
-        "full stack development",
-        "fullstack development",
-        "full stack application",
-        "full stack applications",
-        "fullstack application",
-        "fullstack applications"
-    ),
-    "agile": ("agile", "agile methodologies", "agile environment", "agile environments"),
-    "testing": ("testing", "software testing"),
-    "unit testing": ("unit testing", "unit test", "unit tests"),
-    "automated testing": ("automated testing", "automated test", "automated tests"),
-    "mentoring": (
-        "mentoring",
-        "mentored",
-        "mentor",
-        "mentorship",
-        "team mentorship",
-        "team mentoring"
-    ),
-    "debugging": ("debugging", "debugged"),
-    "code reviews": ("code reviews", "code review"),
-    "stakeholder communication": ("stakeholder communication", "stakeholder interaction"),
-}
-# Specific practices support generic testing, never the reverse.
-_BROADER = {"testing": {"unit testing", "automated testing"}}
-
-
-def _contains(text: str, phrase: str) -> bool:
-    return bool(phrase) and re.search(
-        r"(?<![a-z0-9+#.])" + re.escape(phrase) + r"(?![a-z0-9+#.])",
-        text
-    ) is not None
-
-
-def _canonical(value: str) -> str:
-    value = _normalise(value)
-    for concept, aliases in _CONCEPTS.items():
-        if value in aliases:
-            return concept
-    return value
-
-
-def _concepts(value: str) -> set[str]:
-    value = _normalise(value)
-    return {
-        concept
-        for concept, aliases in _CONCEPTS.items()
-        if any(_contains(value, alias) for alias in aliases)
-    }
+from app.services.matching_terms import _BROADER, _CONCEPTS, _canonical, _concepts, _contains, _normalise
+from app.services.matching_activity import (
+    api_development_without_maintenance, complete_api_request, complete_cloud_request,
+    demonstrates, oracle_database_development, positive_clauses,
+)
+from app.services.requirements import prepare_requirements
+from app.services.technical_relationships import (
+    TechnicalRelationshipCatalogue, load_technical_relationships,
+)
 
 
 def _positive_text(text: str) -> str:
     # Do not turn obvious denials or aspirations into demonstrated experience.
-    parts = re.split(r"[.!?;\n](?=\s|$)", text)
-    return " ".join(_normalise(part) for part in parts if not re.search(
-        r"\b(no|not|never|without|lack|lacks|lacking|learning|learn|plan|planning|hope|aspire|aspiring)\b", part, re.I
-    ))
+    return " ".join(positive_clauses(text))
 
 
 @dataclass
@@ -100,6 +38,8 @@ class _Evidence:
     text: str
     field: str = ""
     raw_text: str = ""
+    statements: list[tuple[str, str]] = dataclass_field(default_factory=list)
+    tag_origins: dict[str, str] = dataclass_field(default_factory=dict)
 
 
 def _collect_evidence(bank: ExperienceBank) -> list[_Evidence]:
@@ -113,7 +53,14 @@ def _collect_evidence(bank: ExperienceBank) -> list[_Evidence]:
         tags: list[str],
         field: str = "",
         outcomes: list[str] | tuple[str, ...] = (),
+        technologies: list[str] | tuple[str, ...] = (),
     ) -> None:
+        origin = "credential" if source_type in {"education", "certification"} else "wording"
+        statements = [(clause, origin) for clause in positive_clauses(text)]
+        statements += [(clause, "outcome") for outcome in outcomes for clause in positive_clauses(outcome)]
+        origins = {tag: "standalone_skill" if source_type == "skill" else
+                   "credential" if source_type == "certification" else "skill_tag" for tag in tags}
+        origins.update({tag: "technology_tag" for tag in technologies})
         collected.append(_Evidence(
             EvidenceReference(
                 evidence_id=item_id,
@@ -121,8 +68,9 @@ def _collect_evidence(bank: ExperienceBank) -> list[_Evidence]:
                 source_label=label,
                 text=text
             ),
-            tags, _positive_text(". ".join([text, *outcomes])), field,
+            [*tags, *technologies], " ".join(clause for clause, _ in statements), field,
             ". ".join([text, *outcomes]),
+            statements, origins,
         ))
 
     for skill in bank.skills:
@@ -130,15 +78,15 @@ def _collect_evidence(bank: ExperienceBank) -> list[_Evidence]:
         collected[-1].reference.text = skill
     for role in bank.work_experience:
         label = f"{role.role} at {role.employer}"
-        add(role.id, "work_experience", label, role.summary, role.skills + role.technologies)
+        add(role.id, "work_experience", label, role.summary, role.skills, technologies=role.technologies)
         for item in role.achievements:
             add(
                 item.id,
                 "achievement",
                 label,
                 item.text,
-                item.skills + item.technologies,
-                outcomes=item.outcomes
+                item.skills,
+                outcomes=item.outcomes, technologies=item.technologies,
             )
     for project in bank.projects:
         add(
@@ -146,7 +94,7 @@ def _collect_evidence(bank: ExperienceBank) -> list[_Evidence]:
             "project",
             project.name,
             project.description,
-            project.skills + project.technologies
+            project.skills, technologies=project.technologies,
         )
         for item in project.evidence:
             add(
@@ -154,8 +102,8 @@ def _collect_evidence(bank: ExperienceBank) -> list[_Evidence]:
                 "project_evidence",
                 project.name,
                 item.text,
-                item.skills + item.technologies,
-                outcomes=item.outcomes
+                item.skills,
+                outcomes=item.outcomes, technologies=item.technologies,
             )
     for item in bank.education:
         add(item.id, "education", item.qualification, item.qualification, [], item.field)
@@ -167,8 +115,8 @@ def _collect_evidence(bank: ExperienceBank) -> list[_Evidence]:
             "additional_evidence",
             "Additional evidence",
             item.text,
-            item.skills + item.technologies,
-            outcomes=item.outcomes
+            item.skills,
+            outcomes=item.outcomes, technologies=item.technologies,
         )
     return collected
 
@@ -320,6 +268,10 @@ def _support(requirement: str, category: str, item: _Evidence) -> tuple[int, lis
     if category == "qualification":
         if kind not in {"education", "certification"}:
             return 0, [], ""
+        if _levels(normalised) and kind != "education":
+            return 0, [], ""
+        if _contains(normalised, "certified") and kind != "certification":
+            return 0, [], ""
         if normalised == _normalise(item.reference.text):
             return 2, [item.reference.text], "Exact qualification"
         if _levels(normalised):
@@ -379,49 +331,347 @@ def _practical_support(requirement: str, item: _Evidence) -> bool:
 
 
 def _requirements(job: JobDescriptionAnalysis) -> list[tuple[str, str]]:
-    requirements: list[tuple[str, str]] = []
-    seen: set[str] = set()
-    # Qualifications retain their category even if duplicated elsewhere.
-    for category, values in (
-        ("qualification", job.qualifications),
-        ("skill", job.technical_skills + job.other_keywords),
-        ("responsibility", job.responsibilities)
-    ):
-        for value in values:
-            key = _canonical(value)
-            if key and key not in seen:
-                seen.add(key)
-                requirements.append((value, category))
-    return requirements
+    """Retained private compatibility view; matching uses prepared records."""
+    return [(item.text, "skill" if item.category == "other_keyword" else item.category)
+            for item in prepare_requirements(job)]
+
+
+@dataclass
+class _Decision:
+    strength: int = 0
+    alternative: str = ""
+    signals: list[MatchingSignal] = dataclass_field(default_factory=list)
+    reason: str = ""
+    practical: bool = False
+
+
+def _names(concept: str, catalogue: TechnicalRelationshipCatalogue) -> tuple[str, ...]:
+    names = [concept, *_CONCEPTS.get(concept, ())]
+    if concept in catalogue.concepts:
+        names += catalogue.concepts[concept].aliases
+    return tuple(dict.fromkeys(names))
+
+
+def _requirement_key(value: str, catalogue: TechnicalRelationshipCatalogue) -> str:
+    """Equivalent wording only: retain substantive qualifiers and conjunctions."""
+    value = _normalise(value)
+    value = re.sub(r"^(?:experience (?:with|in|using)|knowledge of|proficiency in)\s+", "", value)
+    value = re.sub(r"\s+experience$", "", value)
+    aliases = {alias: concept for concept, names in _CONCEPTS.items() for alias in names}
+    aliases.update({_normalise(alias): concept for concept, entry in catalogue.concepts.items()
+                    for alias in (concept, *entry.aliases)})
+    pattern = "|".join(re.escape(alias) for alias in sorted(aliases, key=len, reverse=True))
+    return re.sub(r"(?<![a-z0-9+#.])(?:" + pattern + r")(?![a-z0-9+#.])",
+                  lambda match: aliases[match.group()], value)
+
+
+def _neutral_display(requirement: StructuredRequirement, catalogue: TechnicalRelationshipCatalogue) -> bool:
+    options = {_requirement_key(option, catalogue) for option in requirement.alternatives}
+    display = _requirement_key(requirement.text, catalogue)
+    return display in options or {
+        _requirement_key(part, catalogue) for part in re.split(r"\s+or\s+", requirement.text, flags=re.I)
+    } == options
+
+
+def _rejected(name: str, item: _Evidence, catalogue: TechnicalRelationshipCatalogue) -> bool:
+    names = _names(name, catalogue)
+    if name == "oracle database" and _denied("Oracle", item):
+        return True
+    if any(_denied(alias, item) for alias in names):
+        return True
+    # A local declaration cannot override an exclusively negative/future mention.
+    mentioned = any(_contains(_normalise(item.raw_text), _normalise(alias)) for alias in names)
+    positive = any(_contains(clause, _normalise(alias))
+                   for clause, _ in item.statements for alias in names)
+    return mentioned and not positive
+
+
+def _activity(
+    item: _Evidence, activity: str, names: tuple[str, ...] = (),
+) -> tuple[str, str] | None:
+    if item.reference.source_type in {"education", "certification", "skill"}:
+        return None
+    return next(((clause, origin) for clause, origin in item.statements
+                 if demonstrates(activity, clause, names)), None)
+
+
+def _signal_origin(signal: str, item: _Evidence) -> str:
+    if item.reference.source_type in {"education", "certification"}:
+        return "credential"
+    concept = _canonical(signal)
+    names = _CONCEPTS.get(concept, (signal,))
+    for clause, origin in item.statements:
+        if any(_contains(clause, _normalise(name)) for name in names):
+            return origin
+    for tag in item.tags:
+        if _canonical(tag) == concept:
+            return item.tag_origins[tag]
+    return "wording"
+
+
+def _observed_concepts(
+    item: _Evidence, catalogue: TechnicalRelationshipCatalogue,
+) -> list[tuple[str, MatchingSignal]]:
+    observed = []
+    # Longest known name wins within a phrase: Azure AI Search is not an Azure alias.
+    labels = sorted(((name, concept) for concept, entry in catalogue.concepts.items()
+                     for name in (concept, *entry.aliases)), key=lambda entry: len(entry[0]), reverse=True)
+    for clause, origin in item.statements:
+        remaining = clause
+        for label, concept in labels:
+            label = _normalise(label)
+            if _contains(remaining, label) and not _rejected(concept, item, catalogue):
+                observed.append((concept, MatchingSignal(signal=label, origin=origin)))
+                remaining = re.sub(r"(?<![a-z0-9+#.])" + re.escape(label) + r"(?![a-z0-9+#.])", " ", remaining)
+        if (
+            "oracle database" in catalogue.concepts
+            and oracle_database_development(clause)
+            and not _rejected("oracle database", item, catalogue)
+        ):
+            observed.append(("oracle database", MatchingSignal(
+                signal=clause, origin=origin, demonstrated_activity="technology_usage",
+            )))
+    for tag in item.tags:
+        concept = catalogue.resolve_concept(tag)
+        if concept and not _rejected(concept, item, catalogue):
+            observed.append((concept, MatchingSignal(signal=tag, origin=item.tag_origins[tag])))
+    return observed
+
+
+def _direct_decision(
+    requirement: StructuredRequirement, alternative: str, item: _Evidence,
+    catalogue: TechnicalRelationshipCatalogue,
+) -> _Decision:
+    concept = _requirement_key(alternative, catalogue)
+    if _rejected(concept, item, catalogue):
+        return _Decision()
+    category = "skill" if requirement.category == "other_keyword" else requirement.category
+    strength, signals, reason = _support(alternative, category, item)
+    if requirement.category == "qualification":
+        if requirement.activity:
+            return _Decision()
+        return _Decision(strength, alternative,
+                         [MatchingSignal(signal=signal, origin="credential") for signal in signals], reason)
+
+    # Equivalent catalogue names supplement the retained V2 aliases.
+    if concept in catalogue.concepts or concept != _normalise(alternative):
+        for alias in _names(concept, catalogue):
+            support, local, why = _support(alias, category, item)
+            if support > strength:
+                strength, signals, reason = support, local, why
+    if concept == "oracle database":
+        context = next(((clause, origin) for clause, origin in item.statements
+                        if oracle_database_development(clause)), None)
+        if context and _activity(item, "technology_usage", _names(concept, catalogue)):
+            strength, signals, reason = 2, [context[0]], "Demonstrated Oracle SQL database development"
+
+    names = ("c#", ".net") if concept == "c# .net" else _names(concept, catalogue)
+    controlled = _activity(item, requirement.activity, names if concept in catalogue.concepts
+                           and catalogue.concepts[concept].kind == "technology" else ()) if requirement.activity else None
+    # Non-catalogue technology alternatives (e.g. Java) still bind to their own name.
+    if requirement.activity and concept not in catalogue.concepts and category == "skill":
+        controlled = _activity(item, requirement.activity, names)
+    if concept == "c# .net" and requirement.activity:
+        controlled = next(((clause, origin) for clause, origin in item.statements
+                           if all(demonstrates(requirement.activity, clause, (name,)) for name in names)), None)
+
+    if requirement.activity and not controlled:
+        return _Decision()
+    practical = False
+    usage = None
+    capability_activity = None
+    main_api_support = None
+    if strength:
+        if item.reference.source_type in {"education", "certification", "skill"}:
+            strength, reason = 1, "Relevant declaration or credential; practical activity is not established"
+        elif reason == "Explicit local tags":
+            # Local capability tags can be backed by the very same record's API work.
+            demonstrated_capability = (
+                concept in {"api development", "backend development"} and _activity(item, "api_development")
+            )
+            capability_activity = demonstrated_capability if demonstrated_capability else None
+            strength = 2 if demonstrated_capability else 1
+            reason = "Same-record API activity and capability tag" if demonstrated_capability else "Explicit local declaration; practical use is not established"
+            practical = bool(demonstrated_capability)
+        is_technology = (
+            concept in catalogue.concepts and catalogue.concepts[concept].kind == "technology"
+            or category == "skill" and concept not in _CONCEPTS and concept not in catalogue.concepts
+            or concept in {"javascript", "typescript", "postgresql"}
+        )
+        if is_technology and strength == 2:
+            usage = (
+                next(((clause, origin) for clause, origin in item.statements
+                      if all(demonstrates("technology_usage", clause, (name,)) for name in names)), None)
+                if concept == "c# .net" else _activity(item, "technology_usage", names)
+            )
+            if usage:
+                practical = True
+            else:
+                strength, reason = 1, "Technology wording; practical use is not established"
+
+    # Simple controlled duties can match completed wording without literal tense equality.
+    if controlled:
+        clause, origin = controlled
+        relevant_action_wording = (
+            requirement.activity == "api_development" and re.search(r"\bapis?\b", _normalise(alternative))
+            or requirement.activity == "cloud_deployment" and re.search(r"\bdeploy(?:ment)?\b", _normalise(alternative))
+        )
+        named_technology = concept in catalogue.concepts and catalogue.concepts[concept].kind == "technology"
+        if not strength and not relevant_action_wording and not named_technology:
+            return _Decision()
+        simple = (
+            requirement.activity == "api_development" and complete_api_request(alternative, clause)
+            or requirement.activity == "cloud_deployment" and complete_cloud_request(alternative)
+            or concept in catalogue.concepts and catalogue.concepts[concept].kind == "technology"
+            or strength > 0 and concept in {"api development", "backend development", "cloud technology"}
+            or category == "skill" and _neutral_display(requirement, catalogue)
+        )
+        if simple:
+            strength, signals, reason, practical = 2, [alternative], f"Demonstrated {requirement.activity}", True
+        elif not strength:
+            strength, signals, reason, practical = 1, [requirement.activity], "Partial activity support; other requested claims are not established", True
+
+    if category == "responsibility" and requirement.activity in {None, "api_development"}:
+        main_api = next(((clause, origin) for clause, origin in item.statements
+                         if api_development_without_maintenance(alternative, clause)), None)
+        if main_api and _activity(item, "api_development") and strength < 2:
+            strength, signals, practical = 2, ["API development"], True
+            reason = "Demonstrated API development; API maintenance is not established by this evidence"
+            # Legacy input has no activity metadata; preserve the actual wording origin.
+            capability_activity = main_api
+            main_api_support = main_api
+
+    if category == "responsibility" and not requirement.activity and item.reference.source_type not in {"education", "certification", "skill"}:
+        # Only a tense change of otherwise identical completed wording is direct.
+        tense = {"collaborated": "collaborate", "designed": "design", "developed": "develop",
+                 "maintained": "maintain", "built": "build", "implemented": "implement"}
+        for clause, origin in item.statements:
+            wording = " ".join(tense.get(word, word) for word in clause.split())
+            if _contains(wording, _normalise(alternative)):
+                strength, signals, reason, practical = 2, [alternative], "Completed responsibility wording", True
+                break
+    if strength == 2 and not _neutral_display(requirement, catalogue):
+        strength, reason = 1, "Partial alternative support; additional display qualifiers are not established"
+    # A service name containing a platform name is scoped wording, not equivalence.
+    if concept in catalogue.concepts and catalogue.concepts[concept].kind == "technology":
+        observed = {source for source, _ in _observed_concepts(item, catalogue)}
+        if concept not in observed and any(_contains(_normalise(source), concept) for source in observed):
+            strength, practical = min(strength, 1), False
+            reason = "Platform named within a specific service; platform-wide activity is not established"
+    structured_signals = [MatchingSignal(
+        signal=signal, origin=controlled[1] if controlled else main_api_support[1] if main_api_support else _signal_origin(signal, item),
+        demonstrated_activity="api_development" if main_api_support else requirement.activity if controlled else "technology_usage" if usage else None,
+    ) for signal in signals]
+    if capability_activity:
+        structured_signals.append(MatchingSignal(
+            signal=capability_activity[0], origin=capability_activity[1], demonstrated_activity="api_development",
+        ))
+    return _Decision(strength, alternative, structured_signals, reason, practical)
+
+
+def _relationship_decision(
+    requirement: StructuredRequirement, alternative: str, item: _Evidence,
+    catalogue: TechnicalRelationshipCatalogue,
+) -> _Decision:
+    target = _requirement_key(alternative, catalogue)
+    if requirement.category == "qualification" or target not in catalogue.concepts or _rejected(target, item, catalogue):
+        return _Decision()
+    best = _Decision()
+    for source, signal in _observed_concepts(item, catalogue):
+        for edge in catalogue.relationships_from(source):
+            if edge.target != target:
+                continue
+            names = _names(source, catalogue)
+            constrained = _activity(item, requirement.activity, names) if requirement.activity else None
+            if requirement.activity and not constrained:
+                continue
+            condition = _activity(item, edge.strong_when, names) if edge.strong_when else None
+            source_usage = _activity(item, "technology_usage", names)
+            strength = 2 if edge.type == "broader" and condition else 1
+            if strength == 2 and not _neutral_display(requirement, catalogue):
+                strength = 1
+            relationship = RelationshipReference(
+                source=source, target=target, type=edge.type, confidence=edge.confidence,
+            )
+            provenance = signal.model_copy(update={
+                "relationship": relationship,
+                "demonstrated_activity": requirement.activity if constrained else edge.strong_when if condition else "technology_usage" if source_usage else None,
+                "origin": constrained[1] if constrained else condition[1] if condition else signal.origin,
+            })
+            reason = f"Explicit {edge.type} relationship: {source} → {target}"
+            if strength == 2:
+                reason += f"; demonstrated {edge.strong_when}"
+            elif edge.type == "transferable":
+                reason += "; transferable relevance, not direct platform experience"
+            elif edge.type == "uses_language":
+                reason += "; does not independently demonstrate language proficiency"
+            else:
+                reason += "; the strong-support activity condition is not established"
+            if requirement.activity:
+                reason += f"; same-clause {requirement.activity}"
+            decision = _Decision(strength, alternative, [provenance], reason, bool(constrained or condition or source_usage))
+            if decision.strength > best.strength or decision.strength == best.strength and decision.practical and not best.practical:
+                best = decision
+    return best
+
+
+def _evaluate_requirement(
+    requirement: StructuredRequirement, item: _Evidence, catalogue: TechnicalRelationshipCatalogue,
+) -> _Decision:
+    best = _Decision()
+    for alternative in requirement.alternatives:
+        direct = _direct_decision(requirement, alternative, item, catalogue)
+        related = _relationship_decision(requirement, alternative, item, catalogue)
+        decision = related if (
+            related.strength > direct.strength
+            or related.strength == direct.strength and related.practical and not direct.practical
+        ) else direct
+        if decision.strength > best.strength or (
+            decision.strength == best.strength and decision.practical and not best.practical
+        ):
+            best = decision
+    return best
 
 
 def match_experience_bank(
     bank: ExperienceBank,
-    job: JobDescriptionAnalysis
+    job: JobDescriptionAnalysis,
+    *,
+    catalogue: TechnicalRelationshipCatalogue | None = None,
 ) -> ExperienceBankMatch:
+    catalogue = catalogue if catalogue is not None else load_technical_relationships()
     collected = _collect_evidence(bank)
-    requirements = _requirements(job)
+    requirements = prepare_requirements(job, canonicalise=lambda value: _requirement_key(value, catalogue))
     buckets = {"strong": [], "related": [], "missing": []}
-    evidence_matches: list[list[tuple[str, int, str]]] = [[] for _ in collected]
-    for requirement, category in requirements:
+    evidence_matches: list[list[tuple[StructuredRequirement, _Decision, EvidenceSupport]]] = [[] for _ in collected]
+    for requirement in requirements:
         matches = []
         signals = []
         for index, item in enumerate(collected):
-            strength, local_signals, reason = _support(requirement, category, item)
-            if strength:
-                matches.append((item.reference, strength, reason))
-                signals.extend(local_signals)
-                evidence_matches[index].append((requirement, strength, reason))
-        strength = max((match[1] for match in matches), default=0)
+            decision = _evaluate_requirement(requirement, item, catalogue)
+            if decision.strength:
+                support = EvidenceSupport(
+                    requirement_id=requirement.id, evidence_id=item.reference.evidence_id,
+                    status="strong" if decision.strength == 2 else "related",
+                    selected_alternative=decision.alternative,
+                    signals=decision.signals, explanation=decision.reason,
+                )
+                matches.append((item.reference, decision, support))
+                signals.extend(signal.signal for signal in decision.signals)
+                evidence_matches[index].append((requirement, decision, support))
+        strength = max((match[1].strength for match in matches), default=0)
         status = {0: "missing", 1: "related", 2: "strong"}[strength]
-        best = next((match for match in matches if match[1] == strength), None)
+        best = next((match for match in matches if match[1].strength == strength), None)
         buckets[status].append(MatchResult(
-            requirement=requirement,
+            requirement=requirement.text,
             status=status,
             matched_signals=list(dict.fromkeys(signals)),
             evidence=[match[0] for match in matches],
+            requirement_details=requirement,
+            selected_alternative=best[1].alternative if best else None,
+            evidence_support=[match[2] for match in matches],
             explanation=(
-                f"{best[2]}: {best[0].source_label}."
+                f"{best[1].reason}: {best[0].source_label}."
                 if best else "No supporting evidence was found in the experience bank."
             ),
         ))
@@ -430,21 +680,24 @@ def match_experience_bank(
         if not matches:
             continue
         # Only demonstrated, relevant activity earns the practical tie-break.
-        has_support_beyond_tags = any(
-            reason != "Declared skill or parent context" for _, _, reason in matches
-        )
-        practical = any(_practical_support(requirement, item) for requirement, _, _ in matches)
-        tie_break = 2 if practical else int(bool(item.text) and has_support_beyond_tags)
+        has_wording_support = any(signal.origin in {"wording", "outcome", "credential"}
+                                  for _, decision, _ in matches for signal in decision.signals)
+        practical = any(decision.practical or (
+            has_wording_support and item.reference.source_type not in {"education", "certification"}
+            and _practical_support(decision.alternative, item)
+        ) for _, decision, _ in matches)
+        tie_break = 2 if practical else int(bool(item.text) and has_wording_support)
         # Each requirement contributes 10 for direct or 3 for related support.
         ranked_item = RankedEvidence(
             rank=0,
             evidence=item.reference,
-            status="strong" if any(strength == 2 for _, strength, _ in matches) else "related",
-            matched_signals=[requirement for requirement, _, _ in matches],
-            score=sum(10 if strength == 2 else 3 for _, strength, _ in matches),
+            status="strong" if any(decision.strength == 2 for _, decision, _ in matches) else "related",
+            matched_signals=[requirement.text for requirement, _, _ in matches],
+            evidence_support=[support for _, _, support in matches],
+            score=sum(10 if decision.strength == 2 else 3 for _, decision, _ in matches),
             explanation="; ".join(
-                f"{requirement}: {'strong' if strength == 2 else 'related'} ({reason})"
-                for requirement, strength, reason in matches
+                f"{requirement.text}: {'strong' if decision.strength == 2 else 'related'} ({decision.reason})"
+                for requirement, decision, _ in matches
             ),
         )
         ranked_with_priority.append((ranked_item, tie_break))

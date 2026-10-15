@@ -22,6 +22,7 @@ from app.repositories.json_current_cv import CurrentCVRepositoryError, JsonCurre
 from app.services.current_cv import validate_current_cv_references
 from app.services.llm import LLMServiceError, analyse_job_description_with_llm
 from app.services.matching import match_experience_bank
+from app.services.technical_relationships import TechnicalRelationshipCatalogueError
 
 app = FastAPI(title="CV Tailor API", version="0.1.0")
 
@@ -153,4 +154,10 @@ def match_job_against_experience_bank(
             status_code=503,
             detail="The experience bank could not be loaded.",
         ) from error
-    return match_experience_bank(bank, request.job_analysis)
+    try:
+        return match_experience_bank(bank, request.job_analysis)
+    except TechnicalRelationshipCatalogueError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="The technical relationship catalogue could not be loaded.",
+        ) from error
