@@ -24,10 +24,12 @@ class MockElement {
   append(...children) { this.children.push(...children); }
   replaceChildren(...children) { this.children = []; this._text = ""; this.append(...children); }
   setAttribute(name, value) { this.attributes[name] = String(value); }
+  removeAttribute(name) { delete this.attributes[name]; }
   addEventListener(type, callback) { (this.listeners[type] ||= []).push(callback); }
   focus() { assert(!this.disabled, "Cannot focus a disabled control"); this.focused = true; document.activeElement = this; }
 }
 const ids = [
+  ...shellIds,
   "current-cv-form", "current-cv-fields", "save-current-cv", "retry-current-cv",
   "current-cv-message", "current-cv-warnings", "show-workspace", "show-current-cv",
   "current-cv-state", "cv-add-work", "cv-add-project", "cv-work-list", "cv-project-list",
@@ -42,6 +44,9 @@ globalThis.document = {
     selector === `[data-cv-focus="${node.dataset.cvFocus}"]` || selector === `#${node.id}`),
 };
 globalThis.window = new MockElement();
+globalThis.CustomEvent = class { constructor(type, options = {}) { this.type = type; this.detail = options.detail; } };
+window.dispatchEvent = event => { for (const listener of window.listeners[event.type] || []) listener(event); };
+window.confirm = () => true;
 async function fire(node, type) {
   const event = { prevented: false, preventDefault() { this.prevented = true; } };
   for (const callback of node.listeners[type] || []) await callback(event);

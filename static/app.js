@@ -222,6 +222,8 @@ let resultDescription = "";
 let bankLoading = true;
 let saving = false;
 let matching = false;
+let analysisVersion = 0;
+let activeAnalysisRun = null;
 
 function node(tag, text, className) {
   const element = document.createElement(tag);
@@ -307,9 +309,9 @@ function renderMatches(match) {
   const groups = document.querySelector("#match-groups");
   groups.replaceChildren();
   for (const [label, items, status, explanation] of [
-    ["Strong matches", match.strong_matches, "strong", "Direct support found"],
-    ["Partial matches", match.related_matches, "related", "Incomplete support"],
-    ["Missing or unverified", match.missing_requirements, "missing", "No evidence found"],
+    ["Strong matches", match.strong_matches, "strong", "Strong evidence support"],
+    ["Related matches", match.related_matches, "related", "Related evidence support"],
+    ["Not evidenced", match.missing_requirements, "missing", "No supporting evidence found"],
   ]) {
     const card = node("article", undefined, `result-card status-${status}`);
     const heading = node("h4", undefined, "status-heading");
@@ -393,7 +395,11 @@ function renderMatches(match) {
 bankForm.addEventListener("input", updateState);
 // Structural edits (add/remove) complete before the deferred state check.
 bankForm.addEventListener("click", () => queueMicrotask(updateState));
-jobDescriptionInput.addEventListener("input", updateState);
+jobDescriptionInput.addEventListener("input", () => {
+  analysisVersion += 1;
+  window.dispatchEvent(new CustomEvent("job-analysis-invalidated"));
+  updateState();
+});
 document.querySelector("#edit-job").addEventListener("click", () => {
   document.querySelector("#job-editor").open = true;
   jobDescriptionInput.focus();
@@ -407,6 +413,27 @@ window.addEventListener("beforeunload", event => {
 
 document.querySelector("#add-work").addEventListener("click", () => addWorkExperience());
 document.querySelector("#add-project").addEventListener("click", () => addProject());
+
+window.addEventListener("job-workspace-reset", () => {
+  analysisVersion += 1;
+  activeAnalysisRun = null;
+  matching = false;
+  jobDescriptionInput.value = "";
+  resultVersion = null;
+  resultDescription = "";
+  formError.textContent = "";
+  formError.hidden = true;
+  results.hidden = true;
+  document.querySelector("#analysis-result").hidden = true;
+  document.querySelector("#job-context").hidden = true;
+  for (const id of ["results-title", "overview", "full-analysis", "match-groups", "recommendations", "diagnostics"]) {
+    document.querySelector(`#${id}`).replaceChildren();
+  }
+  document.querySelector("#job-editor").open = true;
+  setLoading(false);
+  saveBankButton.disabled = !bankLoaded || saving;
+  updateState();
+});
 
 bankForm.addEventListener("submit", async event => {
   event.preventDefault();
@@ -466,31 +493,46 @@ matchForm.addEventListener("submit", async event => {
     return;
   }
   const version = bankVersion;
+  const analysisRun = ++analysisVersion;
+  activeAnalysisRun = analysisRun;
   matching = true;
+  window.dispatchEvent(new CustomEvent("job-analysis-started", { detail: { revision: analysisRun } }));
   document.querySelector("#save-bank-button").disabled = true;
   setLoading(true);
   try {
     const analysis = await request("/analyse", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job_description: description }) });
-    const match = await request("/match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job_analysis: analysis }) });
+    if (analysisRun !== analysisVersion) return;
     document.querySelector("#results-title").textContent = analysis.job_title;
+    document.querySelector("#job-context").hidden = false;
     renderAnalysis(analysis);
+    document.querySelector("#analysis-result").hidden = false;
+    window.dispatchEvent(new CustomEvent("job-analysis-ready", { detail: { analysis, revision: analysisRun } }));
+    const match = await request("/match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job_analysis: analysis }) });
+    if (analysisRun !== analysisVersion) return;
     renderMatches(match);
     document.querySelector("#diagnostics").textContent = JSON.stringify({ analysis, match }, null, 2);
     resultVersion = version;
     resultDescription = description;
     results.hidden = false;
+    window.dispatchEvent(new CustomEvent("job-match-ready", { detail: { revision: analysisRun } }));
     updateState();
     // Preserve edits made during the request; only collapse the analysed description.
     document.querySelector("#job-editor").open = jobDescriptionInput.value.trim() !== description;
-    document.querySelector("#results-title").focus();
+    if (!document.querySelector("#workspace-view").hidden && !document.querySelector("#analyse-stage").hidden) document.querySelector("#results-title").focus();
   } catch (error) {
+    if (analysisRun !== analysisVersion) return;
     document.querySelector("#job-editor").open = true;
     formError.textContent = error.message || "Something went wrong. Please try again.";
     formError.hidden = false;
+    window.dispatchEvent(new CustomEvent("job-analysis-failed", { detail: { revision: analysisRun } }));
   } finally {
-    matching = false;
-    document.querySelector("#save-bank-button").disabled = bankLoading;
-    setLoading(false);
+    if (activeAnalysisRun === analysisRun) {
+      activeAnalysisRun = null;
+      matching = false;
+      document.querySelector("#save-bank-button").disabled = bankLoading;
+      setLoading(false);
+      window.dispatchEvent(new CustomEvent("job-analysis-finished", { detail: { revision: analysisRun } }));
+    }
   }
 });
 

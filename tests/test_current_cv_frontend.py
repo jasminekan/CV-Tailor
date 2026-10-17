@@ -3,6 +3,7 @@
 These tests do not replace manual checks in an actual browser.
 """
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -49,11 +50,12 @@ def run_frontend_scenario(tmp_path, scenario, extra_setup=""):
         pytest.skip("JavaScript runtime unavailable; run with Node or JavaScriptCore.")
     harness = HARNESS.read_text(encoding="utf-8")
     setup, assertions = harness.split("// INSERT BUILDER HERE", 1)
-    source = (STATIC / "current_cv.js").read_text(encoding="utf-8")
+    source = (STATIC / "workspace.js").read_text(encoding="utf-8") + "\n" + (STATIC / "current_cv.js").read_text(encoding="utf-8")
     restart = "globalThis.recreateBuilder = () => {\n" + source + "\n};\n" if scenario == "phase5_reload" else ""
     script = tmp_path / "frontend_test.js"
     script.write_text(
         f"const scenario = {json.dumps(scenario)};\n"
+        + f"const shellIds = {json.dumps(re.findall(r'id="([^"]+)"', (STATIC / 'index.html').read_text()))};\n"
         + extra_setup + setup + source + restart + assertions,
         encoding="utf-8",
     )
@@ -145,7 +147,7 @@ def test_current_cv_view_and_script_are_served_by_existing_static_routes():
     client = TestClient(app)
     page = client.get("/")
     assert page.status_code == 200
-    assert "My Current CV" in page.text
+    assert "My CV" in page.text
     script = client.get("/static/current_cv.js")
     assert script.status_code == 200
     assert script.text == (STATIC / "current_cv.js").read_text()

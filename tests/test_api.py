@@ -27,7 +27,7 @@ def test_frontend_is_served_from_root() -> None:
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "Analyse and match" in response.text
+    assert "Analyse Job" in response.text
 
 
 def test_frontend_assets_are_served() -> None:
