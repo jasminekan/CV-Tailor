@@ -33,7 +33,7 @@ class JsonExperienceBankRepository:
             return bank
         except FileNotFoundError:
             return ExperienceBank()
-        except (OSError, json.JSONDecodeError, ValueError) as error:
+        except (OSError, ValueError) as error:
             raise ExperienceBankRepositoryError("The experience bank could not be loaded.") from error
 
     def save(self, bank: ExperienceBank) -> ExperienceBank:

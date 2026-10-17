@@ -11,7 +11,7 @@ from app.models import (
     ExperienceBank, ExperienceBankMatch, JobDescriptionAnalysis,
     LegacyJobDescriptionAnalysis, RequirementActivity, StructuredRequirement,
 )
-from app.services.matching import _requirements, match_experience_bank
+from app.services.matching import match_experience_bank
 from app.services.requirements import prepare_requirements
 from app.services.technical_relationships import ActivityCondition
 
@@ -275,7 +275,6 @@ def test_legacy_adapter_preserves_v2_order_alias_deduplication_and_qualification
         ("BSc Computer Science", "qualification"), ("JavaScript", "skill"),
         ("Python", "skill"), ("Teamwork", "other_keyword"), ("Build APIs", "responsibility"),
     ]
-    assert [item.text for item in prepared] == [text for text, _ in _requirements(job)]
     assert all(item.importance == "unspecified" and item.activity is None for item in prepared)
     assert all(item.source_text == item.text for item in prepared)
     assert prepared[2].id == "legacy:technical_skills:4"
@@ -382,7 +381,7 @@ def test_match_api_accepts_and_projects_structured_data_without_new_matching_rul
     assert response.status_code == 200
     assert captured[0].requirements[0].importance == "required"
     assert captured[0].technical_skills == ["Python"]
-    assert _requirements(captured[0]) == [("Python", "skill")]
+    assert [(item.text, item.category) for item in prepare_requirements(captured[0])] == [("Python", "skill")]
 
 
 def test_legacy_and_structured_matching_share_support_and_scores_but_preserve_metadata():

@@ -1,4 +1,4 @@
-"""Shared V2 terminology rules; unrelated to Current CV skill selection."""
+"""Shared matching terminology rules; separate from Current CV skill selection."""
 
 import re
 
@@ -9,7 +9,7 @@ def _normalise(value: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9+#.]", " ", value)).strip().rstrip(".")
 
 
-# Equivalent terminology only; retained verbatim from the V2 matcher.
+# Equivalent terminology only; technical relationships are handled separately.
 _CONCEPTS = {
     "javascript": ("javascript", "js"),
     "typescript": ("typescript", "ts"),

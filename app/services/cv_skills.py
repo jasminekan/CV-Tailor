@@ -6,7 +6,7 @@ import re
 from app.models import (
     CVCandidateIndex, CVRecommendation, CVSelectionDecision, CVSelectionResult,
     CVSkillCandidate, CVSkillRelevance, CVSkillRequirementCoverage, CurrentCVSkillGroup,
-    EvidenceSupport, ExperienceBankMatch, normalise_skill_key,
+    EvidenceSupport, ExperienceBankMatch, StructuredRequirement, normalise_skill_key,
 )
 from app.services.cv_selection import _match_context, _quality, _support_key, select_work_and_projects
 from app.services.matching_activity import positive_clauses
@@ -47,7 +47,10 @@ def _records(index: CVCandidateIndex) -> dict[str, tuple[str, list[str], list[st
     return records
 
 
-def _raw_supports(matches: ExperienceBankMatch, requirements) -> dict[str, dict[str, EvidenceSupport]]:
+def _raw_supports(
+    matches: ExperienceBankMatch,
+    requirements: dict[str, StructuredRequirement],
+) -> dict[str, dict[str, EvidenceSupport]]:
     records = [support for rows in (matches.strong_matches, matches.related_matches, matches.missing_requirements)
                for row in rows for support in row.evidence_support]
     records.extend(support for item in matches.ranked_evidence for support in item.evidence_support)
@@ -57,8 +60,12 @@ def _raw_supports(matches: ExperienceBankMatch, requirements) -> dict[str, dict[
     return result
 
 
-def _synthetic_ids(index: CVCandidateIndex, matches: ExperienceBankMatch, physical_ids: set[str]):
-    candidates = {}
+def _synthetic_ids(
+    index: CVCandidateIndex,
+    matches: ExperienceBankMatch,
+    physical_ids: set[str],
+) -> tuple[dict[str, str], set[str]]:
+    candidates: dict[str, list[str]] = {}
     for skill in index.skills:
         candidates.setdefault(f"skill:{_normalise(skill.label)}", []).append(skill.skill_key)
     references = [reference for rows in (matches.strong_matches, matches.related_matches, matches.missing_requirements)
@@ -114,7 +121,12 @@ def _mentioned(label: str, text: str, names: dict[str, str]) -> bool:
                for alias in equivalents)
 
 
-def _associated(profile: _Profile, support: EvidenceSupport, record, names: dict[str, str]) -> bool:
+def _associated(
+    profile: _Profile,
+    support: EvidenceSupport,
+    record: tuple[str, list[str], list[str]],
+    names: dict[str, str],
+) -> bool:
     wording, outcomes, technologies = record
     if profile.candidate.skill_key not in {normalise_skill_key(label) for label in technologies}:
         return False
@@ -131,7 +143,14 @@ def _associated(profile: _Profile, support: EvidenceSupport, record, names: dict
                for text in fields for clause in positive_clauses(text))
 
 
-def _profiles(index, matches, requirements, supports, selected_ids, names):
+def _profiles(
+    index: CVCandidateIndex,
+    matches: ExperienceBankMatch,
+    requirements: dict[str, StructuredRequirement],
+    supports: dict[str, dict[str, EvidenceSupport]],
+    selected_ids: set[str],
+    names: dict[str, str],
+) -> tuple[list[_Profile], set[str]]:
     records = _records(index)
     synthetic, ambiguous = _synthetic_ids(index, matches, set(records))
     profiles = []
@@ -165,7 +184,11 @@ def _profiles(index, matches, requirements, supports, selected_ids, names):
     return profiles, ambiguous
 
 
-def _skill_priority(profile: _Profile, represented: set[str], requirements) -> tuple:
+def _skill_priority(
+    profile: _Profile,
+    represented: set[str],
+    requirements: dict[str, StructuredRequirement],
+) -> tuple:
     new = set(profile.links) - represented
     required = {key for key in new if key in requirements and requirements[key].importance == "required"
                 and profile.links[key].kind == "explicit_requirement"}
@@ -188,7 +211,12 @@ def _skill_priority(profile: _Profile, represented: set[str], requirements) -> t
             candidate.bank_position, candidate.skill_key)
 
 
-def _choose_skills(profiles, limit, requirements, names):
+def _choose_skills(
+    profiles: list[_Profile],
+    limit: int | None,
+    requirements: dict[str, StructuredRequirement],
+    names: dict[str, str],
+) -> tuple[list[_Profile], dict[str, str], dict[str, list[str]]]:
     chosen, reasons, marginal = [], {}, {}
     represented, identities = set(), set()
     while limit is None or len(chosen) < limit:
@@ -219,7 +247,11 @@ def _choose_skills(profiles, limit, requirements, names):
     return chosen, reasons, marginal
 
 
-def _groups(index, chosen, names):
+def _groups(
+    index: CVCandidateIndex,
+    chosen: list[_Profile],
+    names: dict[str, str],
+) -> tuple[list[CurrentCVSkillGroup], dict[str, str]]:
     anchors = {}
     for group_index, group in enumerate(index.baseline.skill_groups):
         for key in group.skill_keys:
@@ -229,8 +261,13 @@ def _groups(index, chosen, names):
     placement = {}
     for profile in chosen:
         candidate = profile.candidate
-        groups = anchors.get(_identity(candidate.label, names), set())
-        placement[candidate.skill_key] = candidate.current_cv_group_index if candidate.is_currently_selected else next(iter(groups)) if len(groups) == 1 else fallback
+        matching_groups = anchors.get(_identity(candidate.label, names), set())
+        if candidate.is_currently_selected:
+            placement[candidate.skill_key] = candidate.current_cv_group_index
+        elif len(matching_groups) == 1:
+            placement[candidate.skill_key] = next(iter(matching_groups))
+        else:
+            placement[candidate.skill_key] = fallback
     result, group_names = [], {}
     for position in range(len(index.baseline.skill_groups) + 1):
         baseline = index.baseline.skill_groups[position] if position < len(index.baseline.skill_groups) else None
@@ -308,7 +345,7 @@ def select_cv_content(index: CVCandidateIndex, matches: ExperienceBankMatch, *,
                       catalogue: TechnicalRelationshipCatalogue | None = None) -> CVSelectionResult:
     """Complete the pure preview; catalogue is optional preloaded alias data only.
 
-    Work/project decisions are delegated unchanged to V3.3.2. No loading, matching,
+    Work/project decisions are delegated to select_work_and_projects. No loading, matching,
     rewriting, saving, relationship traversal or new selectable skills occurs.
     """
     work = select_work_and_projects(index, matches)

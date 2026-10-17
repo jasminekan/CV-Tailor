@@ -1,6 +1,0 @@
-$kind: http-request
-name: http://127.0.0.1:8000/experience-bank
-description: ""
-url: http://127.0.0.1:8000/experience-bank
-method: GET
-order: 1000

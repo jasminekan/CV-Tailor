@@ -330,12 +330,6 @@ def _practical_support(requirement: str, item: _Evidence) -> bool:
     return False
 
 
-def _requirements(job: JobDescriptionAnalysis) -> list[tuple[str, str]]:
-    """Retained private compatibility view; matching uses prepared records."""
-    return [(item.text, "skill" if item.category == "other_keyword" else item.category)
-            for item in prepare_requirements(job)]
-
-
 @dataclass
 class _Decision:
     strength: int = 0

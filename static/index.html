@@ -37,32 +37,47 @@
           <p id="page-description" class="intro-copy">Understand the job, review your evidence and focus your CV.</p>
         </div>
 
-    <section id="bank-view" class="workspace" aria-label="Experience Bank" hidden>
-      <details id="bank-editor" class="bank-editor" open>
-        <summary>Saved experience <span id="bank-summary">Loading…</span> <span id="bank-state" role="status"></span></summary>
-      <form id="bank-form" class="panel" novalidate>
-        <div class="results-heading">
-          <div><p class="eyebrow">Source of truth</p><h2>Experience bank</h2></div>
-          <button id="save-bank-button" type="submit" disabled>Save bank</button>
-        </div>
-        <p id="bank-message" class="message" role="status"></p>
-        <label for="skills">Skills</label>
-        <input id="skills" type="text" placeholder="Python, FastAPI, SQL">
-
-        <div class="section-heading"><h3>Work experience</h3><button id="add-work" class="secondary-button" type="button">Add role</button></div>
-        <div id="work-list" class="editor-list"></div>
-        <div class="section-heading"><h3>Projects</h3><button id="add-project" class="secondary-button" type="button">Add project</button></div>
-        <div id="project-list" class="editor-list"></div>
-
-        <label for="education">Education <span class="field-hint">one item per line: qualification | institution | field | year</span></label>
-        <textarea id="education" rows="3" placeholder="BSc Computer Science | University | Computer Science | 2024"></textarea>
-        <label for="certifications">Certifications <span class="field-hint">one item per line: name | issuer | year | skills</span></label>
-        <textarea id="certifications" rows="3" placeholder="AWS Certified Cloud Practitioner | AWS | 2024 | AWS"></textarea>
-        <label>Additional evidence <span class="field-hint">item-specific skills and technologies</span></label>
-        <div id="additional-evidence-editor"></div>
+    <section id="bank-view" class="workspace layout--wide" aria-label="Experience Bank" hidden>
+      <form id="bank-form" class="management-editor" novalidate>
+        <header class="management-toolbar">
+          <div><p class="eyebrow">Your source of truth</p><h2>Manage your experience</h2><p id="bank-summary" class="muted">Loading…</p></div>
+          <div class="management-save"><p id="bank-state" role="status"></p><button id="save-bank-button" type="submit" disabled>Save bank</button></div>
+        </header>
+        <p class="muted">Keep your original wording and recorded skills here. Deleting a bank record can leave unavailable references in My CV. Changes are saved only when you choose Save bank.</p>
+        <div id="bank-message" class="message" role="status" tabindex="-1"></div>
+        <nav class="management-sections" aria-label="Experience Bank sections">
+          <a href="#bank-work-section">Work experience <span id="bank-work-count"></span></a>
+          <a href="#bank-project-section">Projects <span id="bank-project-count"></span></a>
+          <a href="#bank-skills-section">Skills</a><a href="#bank-education-section">Education</a>
+          <a href="#bank-certifications-section">Certifications</a><a href="#bank-evidence-section">Additional evidence</a>
+        </nav>
+        <section id="bank-work-section" class="management-section" aria-labelledby="bank-work-title">
+          <div class="section-heading"><div><h3 id="bank-work-title">Work experience</h3><p class="muted">Open a role to edit its details and individual achievements.</p></div><button id="add-work" class="secondary-button" type="button">Add role</button></div>
+          <div id="work-list" class="editor-list"></div>
+        </section>
+        <section id="bank-project-section" class="management-section" aria-labelledby="bank-project-title">
+          <div class="section-heading"><div><h3 id="bank-project-title">Projects</h3><p class="muted">Keep project context separate from the contributions you made.</p></div><button id="add-project" class="secondary-button" type="button">Add project</button></div>
+          <div id="project-list" class="editor-list"></div>
+        </section>
+        <section id="bank-skills-section" class="management-section" aria-labelledby="bank-skills-title">
+          <h3 id="bank-skills-title">Skills</h3>
+          <label for="skills">Explicitly recorded skills</label>
+          <p id="bank-skills-hint" class="field-hint">Comma separated. Technologies can also be recorded on roles, projects and individual evidence items.</p>
+          <input id="skills" type="text" aria-describedby="bank-skills-hint" placeholder="Python, FastAPI, SQL">
+        </section>
+        <section id="bank-education-section" class="management-section" aria-labelledby="bank-education-title">
+          <div class="section-heading"><div><h3 id="bank-education-title">Education</h3><p class="muted">Qualifications remain in the education section of your CV.</p></div><button id="add-education" class="secondary-button" type="button">Add education</button></div>
+          <div id="education" class="editor-list"></div>
+        </section>
+        <section id="bank-certifications-section" class="management-section" aria-labelledby="bank-certifications-title">
+          <div class="section-heading"><div><h3 id="bank-certifications-title">Certifications</h3><p class="muted">Record certification details separately from demonstrated engineering work.</p></div><button id="add-certifications" class="secondary-button" type="button">Add certification</button></div>
+          <div id="certifications" class="editor-list"></div>
+        </section>
+        <section id="bank-evidence-section" class="management-section" aria-labelledby="bank-evidence-title">
+          <h3 id="bank-evidence-title">Additional evidence</h3><p class="muted">Other recorded experience, with its own skills, technologies and outcomes.</p>
+          <div id="additional-evidence-editor"></div>
+        </section>
       </form>
-
-      </details>
     </section>
 
     <section id="workspace-view" class="workspace" aria-label="Tailor CV workspace">
@@ -73,17 +88,16 @@
       </nav>
       <div id="job-context" class="results-heading job-context" hidden>
         <div><p class="eyebrow">Target role</p><h2 id="results-title" tabindex="-1"></h2></div>
-        <button id="edit-job" class="secondary-button" type="button" aria-controls="job-editor">Edit job description</button>
+        <button id="edit-job" class="secondary-button" type="button" aria-controls="job-editor">Edit job<span class="visually-hidden"> description</span></button>
       </div>
       <p id="workflow-state" class="workflow-state" role="status">Start with a job description. Match and Tailor become available after analysis.</p>
       <p id="refresh-notice" class="notice" role="status" hidden></p>
-      <section id="analyse-stage" class="stage-content" aria-labelledby="analyse-stage-title">
+      <section id="analyse-stage" class="stage-content layout--analyse" aria-labelledby="analyse-stage-title">
       <details id="job-editor" class="bank-editor job-editor" open>
-        <summary>Job description</summary>
-      <form id="match-form" class="panel" novalidate>
-        <div class="results-heading"><div><p class="eyebrow">Step 1 / Understand the role</p><h2 id="analyse-stage-title">Start with the job.</h2></div></div>
+        <summary><h2 id="analyse-stage-title">Analyse a job description</h2></summary>
+      <form id="match-form" class="panel" aria-describedby="analyse-description" novalidate>
+        <p id="analyse-description" class="muted">Paste the full role description to find relevant evidence in your saved Experience Bank.</p>
         <label for="job-description">Job description</label>
-        <p class="muted">Matching uses your saved experience bank.</p>
         <p id="saved-bank-notice" class="notice" role="status" hidden>Unsaved bank changes are excluded. Save your bank before matching to include them.</p>
         <textarea id="job-description" rows="12" placeholder="Paste the full job description here..." required></textarea>
         <p id="form-error" class="message error" role="alert" hidden></p>
@@ -93,37 +107,61 @@
       </details>
 
       <section id="analysis-result" class="results" aria-labelledby="overview-title" hidden>
-        <section class="dashboard-section" aria-labelledby="overview-title">
-          <h3 id="overview-title">Job overview</h3>
-          <p class="muted">Selected requirements from the job description.</p>
-          <div id="overview" class="overview-grid"></div>
-          <details><summary>Full job analysis</summary><div id="full-analysis" class="overview-grid"></div></details>
+        <div class="results-heading analysis-result-heading">
+          <h3 id="overview-title">What JobMatch understood</h3>
+          <button id="continue-to-match" type="button" disabled>Continue to Match <span aria-hidden="true">→</span></button>
+        </div>
+        <section class="analysis-understanding" aria-labelledby="overview-title">
+          <p class="muted">Requirements from the description. Separate entries remain independent; OR options belong to one requirement.</p>
+          <p id="analysis-format-note" class="notice" hidden></p>
+          <div id="overview" class="analysis-requirements"></div>
+          <details class="analysis-sources"><summary>Original source wording</summary><div id="full-analysis"></div></details>
         </section>
-        <div class="stage-actions"><p class="muted">Review the extracted requirements, then explore your supporting experience.</p><button id="continue-to-match" type="button" disabled>Continue to Match <span aria-hidden="true">→</span></button></div>
       </section>
       </section>
 
-      <section id="match-stage" class="stage-content" aria-labelledby="match-stage-title" hidden>
-        <div class="stage-heading"><div><p class="eyebrow">Step 2 / Review the evidence</p><h2 id="match-stage-title">Your experience, in context.</h2></div><button id="match-generate-preview" type="button" disabled>Generate Tailored CV Preview</button></div>
+      <section id="match-stage" class="stage-content layout--wide" aria-labelledby="match-stage-title" hidden>
+        <div class="stage-heading"><div><h2 id="match-stage-title">Requirement matches</h2></div><button id="match-generate-preview" type="button" disabled>Generate Tailored CV Preview</button></div>
         <p id="match-empty" class="empty-state" role="status">Your evidence matches will appear here when matching is ready.</p>
         <section id="results" class="results" aria-label="Job matching results" hidden>
-        <section class="dashboard-section" aria-labelledby="strengths-title">
-          <h3 id="strengths-title">Your strengths and gaps</h3>
-          <p class="muted">Support found in your saved experience bank. Missing evidence does not establish a lack of experience.</p>
-          <div id="match-groups" class="match-results"></div>
+        <section class="match-overview" aria-labelledby="strengths-title">
+          <h3 id="strengths-title" class="visually-hidden">Evidence summary</h3>
+          <p class="muted">Support recorded in your saved Experience Bank.</p>
+          <div id="match-groups" class="match-summary"></div>
+          <div class="requirement-filters" role="group" aria-label="Filter requirements by evidence classification">
+            <button id="filter-all" class="secondary-button" type="button" aria-controls="requirement-list" aria-pressed="true">All</button>
+            <button id="filter-strong" class="secondary-button" type="button" aria-controls="requirement-list" aria-pressed="false">Strong</button>
+            <button id="filter-related" class="secondary-button" type="button" aria-controls="requirement-list" aria-pressed="false">Related</button>
+            <button id="filter-missing" class="secondary-button" type="button" aria-controls="requirement-list" aria-pressed="false">Not evidenced</button>
+          </div>
+          <p id="requirement-count" class="muted" role="status"></p>
         </section>
-        <section class="dashboard-section" aria-labelledby="experience-title">
-          <h3 id="experience-title">Relevant CV experience</h3>
-          <p class="muted">Original evidence to consider for your CV. Achievements and contributions are highlighted; ranking within each evidence type is preserved.</p>
+        <div class="requirement-workspace">
+          <section class="requirement-browser" aria-labelledby="requirement-list-title">
+            <h3 id="requirement-list-title">Job requirements</h3>
+            <p class="muted requirement-keyboard-hint">Select a requirement. Use ↑, ↓, Home or End to move through the list. Longer lists scroll.</p>
+            <div id="requirement-list" class="requirement-choices"></div>
+            <a class="evidence-jump" href="#requirement-evidence">Read supporting evidence</a>
+          </section>
+          <section id="requirement-evidence" class="requirement-inspector" aria-labelledby="selected-requirement-title" tabindex="0">
+            <h3 id="selected-requirement-title">Supporting evidence</h3>
+            <p id="requirement-selection-status" class="visually-hidden" role="status"></p>
+            <div id="selected-requirement"></div>
+            <div id="requirement-evidence-content"></div>
+          </section>
+        </div>
+        <details class="supplementary-evidence" aria-labelledby="experience-title">
+          <summary id="experience-title">Browse supplementary bank evidence</summary>
+          <p class="muted">The existing ranked evidence, grouped by source. A record may support several requirements; inspect each requirement for its specific support.</p>
           <div id="recommendations"></div>
-        </section>
+        </details>
         <details class="diagnostics"><summary>Full matching diagnostics</summary><p class="muted">Original analysis and matching responses, including all signals, explanations and ranking scores.</p><pre id="diagnostics"></pre></details>
       </section>
       </section>
 
-      <section id="tailor-stage" class="stage-content" aria-labelledby="tailoring-title" hidden>
+      <section id="tailor-stage" class="stage-content layout--tailor" aria-labelledby="tailoring-title" hidden>
       <section id="tailoring-preview" class="tailoring-panel" aria-labelledby="tailoring-title" hidden>
-        <div class="results-heading">
+        <div class="results-heading tailoring-toolbar">
           <div><p class="eyebrow">Read-only recommendation</p><h2 id="tailoring-title">Tailored CV Preview</h2></div>
           <button id="generate-tailored-preview" type="button" disabled>Generate Tailored CV Preview</button>
         </div>
@@ -131,62 +169,77 @@
         <p id="tailoring-target" class="cv-source-text"></p>
         <p id="tailoring-state" class="message" role="status"></p>
         <p id="tailoring-error" class="message error" role="alert" hidden></p>
-        <div id="tailoring-output" hidden>
-          <div id="tailoring-warnings" class="notice" role="status" hidden></div>
-          <article id="tailored-cv-content" class="cv-preview" aria-label="Proposed CV content"></article>
-          <section class="dashboard-section" aria-labelledby="tailoring-coverage-title">
-            <h3 id="tailoring-coverage-title">Requirement coverage</h3>
-            <p class="muted">Bank evidence and selected CV content are different. Skills are recorded labels; education and certifications stay in their own sections.</p>
-            <div id="tailoring-coverage"></div>
+        <section id="tailoring-empty" class="tailoring-empty" aria-labelledby="tailoring-empty-title">
+          <p class="eyebrow">Your next step</p>
+          <h3 id="tailoring-empty-title">See your proposed CV</h3>
+          <p>No tailored preview exists yet. Generate one to review your existing content alongside the reasons for each recommendation.</p>
+          <p class="muted">Original wording is preserved. This read-only preview uses your saved bank and Current CV; it does not edit either.</p>
+        </section>
+        <div id="tailoring-output" class="tailoring-workspace" hidden>
+          <section class="tailoring-document-area" aria-labelledby="tailoring-document-title">
+            <div class="tailoring-document-heading"><h3 id="tailoring-document-title">Proposed CV</h3><span class="muted">Original content · Read only</span></div>
+            <article id="tailored-cv-content" class="tailored-document" aria-label="Proposed CV content"></article>
           </section>
-          <details class="tailoring-changes">
-            <summary>Selection explanations &amp; changes</summary>
-            <p class="muted">Retained and recommended describe selection. Strong and related describe evidence support. Omitted content appears only here.</p>
-            <div id="tailoring-decisions"></div>
-          </details>
+          <aside class="tailoring-review" aria-labelledby="tailoring-review-title">
+            <header><p class="eyebrow">Why this content</p><h3 id="tailoring-review-title">Review your selections</h3></header>
+            <p class="muted">Retained and recommended describe selection. Strong and related describe evidence support.</p>
+            <div id="tailoring-summary" class="tailoring-summary" aria-label="Selection summary"></div>
+            <p class="tailoring-count-note muted">Counts include separate decisions for roles, bullets, projects and skills. Credentials are reviewed below.</p>
+            <section id="tailoring-warnings" class="tailoring-warnings" aria-label="Preview notes and limitations" role="status" hidden></section>
+            <section aria-labelledby="tailoring-changes-title">
+              <h4 id="tailoring-changes-title">Changes &amp; recommendations</h4>
+              <p class="muted">Open an item for its original wording, reasons, supported requirements and caveats.</p>
+              <div id="tailoring-decisions"></div>
+            </section>
+            <details class="tailoring-coverage-disclosure">
+              <summary id="tailoring-coverage-title">Requirement coverage</summary>
+              <p class="muted">Bank evidence and selected work/projects are different. Recorded skill labels do not establish practical activity. Education and certifications remain in their own CV sections.</p>
+              <div id="tailoring-coverage"></div>
+            </details>
+          </aside>
         </div>
       </section>
       </section>
     </section>
 
-    <section id="current-cv-view" class="workspace" aria-labelledby="current-cv-title" hidden>
-      <form id="current-cv-form" class="panel" novalidate>
-        <div class="results-heading">
-          <div><p class="eyebrow">Your saved selections</p><h2 id="current-cv-title" tabindex="-1">My CV</h2></div>
-          <button id="save-current-cv" type="submit" disabled>Save Current CV</button>
-        </div>
-        <p class="muted">Choose your baseline CV content from the saved Experience Bank. Unsaved bank edits are excluded. My CV uses the existing Current CV settings; use Save Current CV to keep your changes.</p>
-        <p id="current-cv-state" role="status">Not loaded</p>
+    <section id="current-cv-view" class="workspace layout--wide cv-management" aria-labelledby="current-cv-title" hidden>
+      <form id="current-cv-form" class="management-editor" novalidate>
+        <header class="management-toolbar">
+          <div><p class="eyebrow">Your baseline CV</p><h2 id="current-cv-title" tabindex="-1">Choose your CV content</h2></div>
+          <div class="management-save"><p id="current-cv-state" role="status">Not loaded</p><button id="save-current-cv" type="submit" disabled>Save Current CV</button></div>
+        </header>
+        <p class="muted">Select original content from your saved Experience Bank. Removing a selection here leaves the bank record intact. Unsaved bank edits are excluded.</p>
+        <nav class="management-sections" aria-label="My CV sections"><a href="#cv-work-section">Work experience</a><a href="#cv-project-section">Projects</a><a href="#cv-skills-section">Skills</a><a href="#cv-settings-section">Tailoring limits</a><a href="#cv-preview-title">Draft preview &amp; credentials</a></nav>
         <div id="current-cv-message" class="message" role="status"></div>
         <button id="retry-current-cv" class="secondary-button" type="button" hidden>Retry loading</button>
         <div id="current-cv-warnings" class="notice" role="status" hidden></div>
         <fieldset id="current-cv-fields" disabled>
           <legend class="visually-hidden">Current CV selections</legend>
-          <section aria-labelledby="cv-work-title">
-            <h3 id="cv-work-title">Work Experience</h3>
+          <section id="cv-work-section" class="management-section" aria-labelledby="cv-work-title">
+            <h3 id="cv-work-title">Work experience</h3><p class="muted">Roles stay linked to the bank. Move selections to change their CV order; use Change to choose another recorded bullet.</p>
             <div id="cv-add-work"></div>
             <div id="cv-work-list" class="editor-list"></div>
           </section>
-          <section aria-labelledby="cv-project-title">
-            <h3 id="cv-project-title">Projects</h3>
+          <section id="cv-project-section" class="management-section" aria-labelledby="cv-project-title">
+            <h3 id="cv-project-title">Projects</h3><p class="muted">Choose projects and the original contributions to include.</p>
             <div id="cv-add-project"></div>
             <div id="cv-project-list" class="editor-list"></div>
           </section>
-          <section aria-labelledby="cv-skills-title">
+          <section id="cv-skills-section" class="management-section" aria-labelledby="cv-skills-title">
             <h3 id="cv-skills-title">Skills Groups</h3>
             <p class="muted">Choose your own headings. Each skill can appear once across your CV.</p>
             <div id="cv-add-skill-group"></div>
             <div id="cv-skill-group-list" class="editor-list"></div>
           </section>
-          <section aria-labelledby="cv-settings-title">
-            <h3 id="cv-settings-title">Tailoring Settings</h3>
+          <section id="cv-settings-section" class="management-section" aria-labelledby="cv-settings-title">
+            <h3 id="cv-settings-title">Tailoring limits</h3>
             <p class="muted">Used when generating a Tailored CV Preview. These limits do not change your manually selected content. Leave blank for no limit; zero excludes that content from the tailored selection.</p>
             <div id="cv-tailoring-settings" class="cv-settings-grid"></div>
           </section>
         </fieldset>
       </form>
-      <section class="cv-preview" aria-labelledby="cv-preview-title">
-        <h2 id="cv-preview-title">Current CV Preview</h2>
+      <section id="cv-draft-preview" class="cv-preview baseline-preview" aria-labelledby="cv-preview-title" tabindex="0">
+        <h2 id="cv-preview-title" tabindex="-1">Your baseline CV draft</h2>
         <p class="muted">Read-only preview of your draft, using original wording from the saved bank.</p>
         <div id="cv-preview-content"></div>
       </section>

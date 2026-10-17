@@ -305,7 +305,7 @@ def test_empty_responsibilities_can_originate_in_provider_output(
 
 
 @pytest.mark.parametrize("include_duties", [True, False])
-def test_actual_analysis_renderer_displays_projected_duties_in_both_views(
+def test_actual_analysis_renderer_displays_duties_once_and_preserves_source_wording(
     tmp_path, include_duties, provider_payload, analyse_with_mocked_provider,
 ):
     runtime = shutil.which("node") or shutil.which("jsc")
@@ -324,16 +324,16 @@ def test_actual_analysis_renderer_displays_projected_duties_in_both_views(
     assert response.status_code == 200
     source = STATIC_SCRIPT.read_text(encoding="utf-8")
     node_function = "function node(" + source.split("function node(", 1)[1].split("\nfunction disclosure", 1)[0]
-    renderer = "function renderAnalysis(" + source.split("function renderAnalysis(", 1)[1].split("\nfunction requirementRow", 1)[0]
+    renderer = "function appendRequirementMetadata(" + source.split("function appendRequirementMetadata(", 1)[1].split("// Presentation state only", 1)[0]
     # Execute the real renderer against a minimal DOM, without running bank/CV code.
     script = tmp_path / "analysis_renderer.js"
     script.write_text(
         """class Element {
-  constructor(tag) { this.tag = tag; this.textContent = ''; this.children = []; }
+  constructor(tag) { this.tag = tag; this.textContent = ''; this.children = []; this.dataset = {}; }
   append(...children) { this.children.push(...children); }
   replaceChildren(...children) { this.children = [...children]; }
 }
-const targets = { '#overview': new Element('div'), '#full-analysis': new Element('div') };
+const targets = { '#overview': new Element('div'), '#full-analysis': new Element('div'), '#analysis-format-note': new Element('p') };
 const document = {
   createElement: tag => new Element(tag),
   querySelector: selector => targets[selector],
@@ -344,11 +344,12 @@ const document = {
         + f"const expected = {json.dumps(EXPECTED_RESPONSIBILITIES if include_duties else ['None identified'])};\n"
         + """const before = JSON.stringify(analysis);
 renderAnalysis(analysis);
-for (const target of Object.values(targets)) {
-  const card = target.children.find(item => item.children[0].textContent === 'Responsibilities');
-  const displayed = card.children.find(item => item.tag === 'ul').children.map(item => item.textContent);
-  if (JSON.stringify(displayed) !== JSON.stringify(expected)) throw new Error(JSON.stringify(displayed));
-}
+const card = targets['#overview'].children.find(item => item.children[0].textContent === 'Responsibilities');
+const displayed = card.children.find(item => item.tag === 'ul').children.map(item => item.children.find(child => child.tag === 'p')?.textContent || item.textContent);
+if (JSON.stringify(displayed) !== JSON.stringify(expected)) throw new Error(JSON.stringify(displayed));
+const sourceQuotes = targets['#full-analysis'].children.map(item => item.textContent);
+const expectedQuotes = [...new Set(analysis.requirements.map(item => item.source_text))];
+if (JSON.stringify(sourceQuotes) !== JSON.stringify(expectedQuotes)) throw new Error('Original source wording changed or repeated');
 if (JSON.stringify(analysis) !== before) throw new Error('Renderer mutated analysis');
 """,
         encoding="utf-8",

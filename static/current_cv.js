@@ -18,6 +18,7 @@
   let skillCatalogue = new Map();
   let settingEdits = {};
   let settingErrors = {};
+  let choiceSequence = 0;
   const clone = value => JSON.parse(JSON.stringify(value));
   const ready = () => bankReady && cvReady && draft !== null;
   const dirty = () => draft !== null && (JSON.stringify(draft) !== baseline || Object.keys(settingErrors).length > 0);
@@ -188,7 +189,13 @@
     message.replaceChildren();
     render();
     // Focus keys contain only section names, indices and control names.
-    if (focusKey) find(`[data-cv-focus="${focusKey}"]`)?.focus();
+    if (focusKey) {
+      const target = find(`[data-cv-focus="${focusKey}"]`);
+      for (let parent = target?.parentElement; parent; parent = parent.parentElement) {
+        if (parent.tagName.toLowerCase() === "details") parent.open = true;
+      }
+      target?.focus();
+    }
   }
 
   function button(text, action, disabled = false, focusKey = null) {
@@ -223,21 +230,45 @@
   }
 
   function picker(target, records, label, placeholder, actionLabel, onSelect) {
+    const disclosure = element("details", undefined, "cv-choice");
+    disclosure.append(element("summary", actionLabel));
     const row = element("div", undefined, "cv-picker");
     const select = selectOptions(records, label, placeholder);
+    select.id = `cv-choice-${++choiceSequence}`;
+    const fieldLabel = element("label", placeholder);
+    fieldLabel.setAttribute("for", select.id);
+    disclosure.append(fieldLabel);
     const add = button(actionLabel, () => {
       if (records.some(record => record.id === select.value)) onSelect(select.value);
     }, true);
     select.disabled = records.length === 0;
     select.addEventListener("change", () => { add.disabled = !select.value; });
     row.append(select, add);
-    target.append(row);
-    if (!records.length) target.append(element("p", "No more saved records available to select.", "muted"));
+    disclosure.append(row);
+    target.append(disclosure);
+    if (!records.length) disclosure.append(element("p", "No more saved records available to select.", "muted"));
+  }
+
+  function changeChoice(select, labelText, unavailable = false) {
+    const area = element("details", undefined, "cv-choice cv-change-choice");
+    area.open = unavailable;
+    area.append(element("summary", "Change"));
+    select.id = `cv-choice-${++choiceSequence}`;
+    const label = element("label", labelText);
+    label.setAttribute("for", select.id);
+    area.append(label, select);
+    return area;
   }
 
   function orderingControls(items, index, section, kind, remove) {
-    const row = element("div", undefined, "cv-controls");
+    const compact = kind.startsWith("bullet-") || kind.startsWith("skill-");
+    const row = element("div", undefined, compact ? "cv-controls cv-compact-controls" : "cv-controls");
     const key = `${section.key}-${kind}`;
+    const context = kind.startsWith("bullet-") ? `${section.bulletName} ${index + 1} in ${section.name} ${Number(kind.split("-")[1]) + 1}`
+      : kind.startsWith("skill-") ? `skill ${index + 1} in skills group ${Number(kind.split("-")[1]) + 1}`
+      : `${section.name || "skills group"} ${index + 1}`;
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", `Controls for ${context}`);
     const move = direction => {
       const destination = index + direction;
       if (destination < 0 || destination >= items.length) return;
@@ -247,10 +278,17 @@
       }, `${key}-${destination}-${nextControl}`);
     };
     row.append(
-      button("Move Up", () => move(-1), index === 0, `${key}-${index}-up`),
-      button("Move Down", () => move(1), index === items.length - 1, `${key}-${index}-down`),
-      button(remove, () => change(() => items.splice(index, 1))),
+      button(compact ? "↑" : "Move Up", () => move(-1), index === 0, `${key}-${index}-up`),
+      button(compact ? "↓" : "Move Down", () => move(1), index === items.length - 1, `${key}-${index}-down`),
+      button(compact ? "Remove" : remove, () => change(() => items.splice(index, 1), `${section.key}-section-heading`)),
     );
+    for (const [position, action] of ["Move Up", "Move Down"].entries()) {
+      row.children[position].setAttribute("aria-label", `${action} ${context}`);
+      row.children[position].title = `${action} ${context}`;
+      if (compact) row.children[position].className = "secondary-button cv-move-control";
+    }
+    const removeButton = row.children[row.children.length - 1];
+    removeButton.setAttribute("aria-label", `${remove} from My CV (${context}); the bank record is kept`);
     return row;
   }
 
@@ -302,17 +340,23 @@
     addTarget.replaceChildren();
     list.replaceChildren();
     if (!draft) return;
+    const sectionHeading = find(section.key === "work_experience" ? "#cv-work-title" : "#cv-project-title");
+    sectionHeading.dataset.cvFocus = `${section.key}-section-heading`;
+    sectionHeading.setAttribute("tabindex", "-1");
     const selections = draft[section.key];
     picker(addTarget, availableParents(section), section.label, `Choose ${section.name}`, section.addLabel, id => change(() => {
       if (!selections.some(selection => selection[section.parentKey] === id)) selections.push({ [section.parentKey]: id, [section.bulletKey]: [] });
-    }));
+    }, `${section.key}-parent-${selections.length}-heading`));
     if (!selections.length) list.append(element("p", `No ${section.name === "experience" ? "work experience" : "projects"} selected.`, "muted"));
     selections.forEach((selection, index) => {
       const id = selection[section.parentKey];
       const record = recordsFor(section).find(item => item.id === id);
       const card = element("article", undefined, record ? "cv-card" : "cv-card cv-missing");
       card.dataset.parentId = id;
-      card.append(element("h4", record ? section.label(record) : `Unavailable ${section.name} (${id})`));
+      const heading = element("h4", record ? section.label(record) : `Unavailable ${section.name} (${id})`);
+      heading.dataset.cvFocus = `${section.key}-parent-${index}-heading`;
+      heading.setAttribute("tabindex", "-1");
+      card.append(heading, element("p", "Selected from your saved Experience Bank. Removing this selection does not delete the bank record.", "cv-selection-note muted"));
       if (record?.start_date || record?.end_date) card.append(element("p", `${record.start_date || ""} – ${record.end_date || ""}`, "muted"));
       card.append(orderingControls(selections, index, section, "parent", `Remove ${section.name}`));
       if (!record) {
@@ -329,19 +373,26 @@
         const item = record?.[section.children].find(child => child.id === bulletId);
         const row = element("li", undefined, item ? "cv-bullet" : "cv-bullet cv-missing");
         row.dataset.bulletId = bulletId;
-        row.append(element("p", item ? item.text : `Unavailable ${section.bulletName} (${bulletId})`, "cv-bullet-text"));
+        const wording = element("p", item ? item.text : `Unavailable ${section.bulletName} (${bulletId})`, "cv-bullet-text");
+        wording.dataset.cvFocus = `${section.key}-bullet-${index}-${bulletIndex}-text`;
+        wording.setAttribute("tabindex", "-1");
+        row.append(wording);
         const select = selectOptions(availableBullets(section, record, bulletId), child => child.text, `Choose ${section.bulletName} for ${section.name} ${index + 1}`, bulletId);
+        const focusKey = `${section.key}-bullet-${index}-${bulletIndex}-select`;
+        select.dataset.cvFocus = focusKey;
         select.disabled = !record;
         select.addEventListener("change", () => change(() => {
           if (record?.[section.children].some(child => child.id === select.value) && !selectedBulletIds().has(select.value)) selection[section.bulletKey][bulletIndex] = select.value;
-        }));
-        row.append(select, orderingControls(selection[section.bulletKey], bulletIndex, section, `bullet-${index}`, `Remove ${section.bulletName}`));
+        }, focusKey));
+        const actions = element("div", undefined, "cv-item-actions");
+        actions.append(changeChoice(select, `Choose a recorded ${section.bulletName}`, !item), orderingControls(selection[section.bulletKey], bulletIndex, section, `bullet-${index}`, `Remove ${section.bulletName}`));
+        row.append(actions);
         bullets.append(row);
       });
       card.append(bullets);
       if (record) picker(card, availableBullets(section, record), child => child.text, `Choose ${section.bulletName} to add`, section.addBulletLabel, bulletId => change(() => {
         if (record[section.children].some(item => item.id === bulletId) && !selectedBulletIds().has(bulletId)) selection[section.bulletKey].push(bulletId);
-      }));
+      }, `${section.key}-bullet-${index}-${selection[section.bulletKey].length}-text`));
       list.append(card);
     });
   }
@@ -360,6 +411,8 @@
       const name = normaliseSkillKey(group.name);
       const duplicate = draft.skill_groups.some((other, otherIndex) => otherIndex !== index && normaliseSkillKey(other.name) === name);
       find(`#cv-group-heading-${index}`)?.setAttribute("aria-invalid", String(!name || duplicate));
+      const error = find(`#cv-group-heading-${index}-error`);
+      if (error) error.textContent = !name ? "Enter a nonblank group heading." : duplicate ? "Choose a unique group heading." : "";
     });
   }
 
@@ -369,9 +422,12 @@
     addTarget.replaceChildren();
     list.replaceChildren();
     if (!draft) return;
+    find("#cv-skills-title").dataset.cvFocus = "skill_groups-section-heading";
+    find("#cv-skills-title").setAttribute("tabindex", "-1");
     const addRow = element("div", undefined, "cv-picker");
     const heading = element("input");
     heading.type = "text";
+    heading.id = "cv-new-group-heading";
     heading.placeholder = "New group heading, e.g. Languages";
     heading.setAttribute("aria-label", "New skills group heading");
     addRow.append(heading, button("Add Skills Group", () => {
@@ -383,7 +439,9 @@
       }
       change(() => draft.skill_groups.push({ name: heading.value, skill_keys: [] }), `skill_groups-group-${draft.skill_groups.length}-heading`);
     }));
-    addTarget.append(addRow);
+    const headingLabel = element("label", "New skills group heading");
+    headingLabel.setAttribute("for", heading.id);
+    addTarget.append(headingLabel, addRow);
     if (!draft.skill_groups.length) list.append(element("p", "No skills groups selected.", "muted"));
     draft.skill_groups.forEach((group, groupIndex) => {
       const card = element("article", undefined, "cv-card");
@@ -395,6 +453,9 @@
       nameInput.id = `cv-group-heading-${groupIndex}`;
       nameInput.dataset.cvFocus = `skill_groups-group-${groupIndex}-heading`;
       nameInput.value = group.name;
+      nameInput.setAttribute("aria-describedby", `${nameInput.id}-error`);
+      const headingError = element("p", "", "message error");
+      headingError.id = `${nameInput.id}-error`;
       const label = element("label", "Group heading");
       label.setAttribute("for", nameInput.id);
       nameInput.addEventListener("input", () => {
@@ -408,7 +469,7 @@
         renderPreview();
         updateControls();
       });
-      headingRow.append(label, nameInput);
+      headingRow.append(label, nameInput, headingError);
       card.append(title, headingRow, orderingControls(draft.skill_groups, groupIndex, { key: "skill_groups" }, "group", "Remove Group"));
       const skills = element("ul", undefined, "cv-skill-list");
       group.skill_keys.forEach((key, skillIndex) => {
@@ -422,7 +483,9 @@
         select.addEventListener("change", () => change(() => {
           if (skillCatalogue.has(select.value) && !selectedSkillKeys().has(select.value)) group.skill_keys[skillIndex] = select.value;
         }, focusKey));
-        row.append(select, orderingControls(group.skill_keys, skillIndex, { key: "skill_groups" }, `skill-${groupIndex}`, "Remove Skill"));
+        const actions = element("div", undefined, "cv-item-actions");
+        actions.append(changeChoice(select, "Choose a recorded skill", !available), orderingControls(group.skill_keys, skillIndex, { key: "skill_groups" }, `skill-${groupIndex}`, "Remove Skill"));
+        row.append(actions);
         skills.append(row);
       });
       card.append(skills);
