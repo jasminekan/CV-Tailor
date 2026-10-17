@@ -5,25 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>JobMatch CV Tailor</title>
   <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/workspace.js" defer></script>
   <script src="/static/app.js" defer></script>
   <script src="/static/current_cv.js" defer></script>
+  <script src="/static/tailoring_preview.js" defer></script>
 </head>
 <body>
-  <main class="page-shell">
-    <section class="intro" aria-labelledby="page-title">
-      <p class="eyebrow">CV Tailor / v3.1</p>
-      <h1 id="page-title">Find the experience that fits.</h1>
-      <p class="intro-copy">Build a private experience bank once, then use it to find the strongest evidence for every job.</p>
-    </section>
+  <a class="skip-link" href="#main-content">Skip to workspace</a>
+  <div class="app-shell">
+    <aside class="app-sidebar" aria-label="Workspace navigation">
+      <div class="brand-row">
+        <a class="brand" href="#main-content" aria-label="JobMatch workspace"><span class="brand-mark" aria-hidden="true">J</span><span>JobMatch<span class="brand-caption">Your experience, focused.</span></span></a>
+        <button id="toggle-navigation" class="secondary-button mobile-menu-toggle" type="button" aria-controls="app-navigation" aria-expanded="false">Menu</button>
+      </div>
+      <nav id="app-navigation" class="workspace-navigation" aria-label="Application" data-open="false">
+        <p class="nav-group-label">Workspace</p>
+        <button id="show-workspace" class="nav-destination" type="button" aria-controls="workspace-view" aria-pressed="true"><span aria-hidden="true">▤</span>Tailor CV</button>
+        <button id="new-analysis" class="nav-action" type="button"><span aria-hidden="true">＋</span>New Analysis</button>
+        <p class="nav-group-label">My content</p>
+        <button id="show-bank" class="nav-destination" type="button" aria-controls="bank-view" aria-pressed="false"><span aria-hidden="true">▦</span>Experience Bank</button>
+        <button id="show-current-cv" class="nav-destination" type="button" aria-controls="current-cv-view" aria-pressed="false"><span aria-hidden="true">▧</span>My CV</button>
+      </nav>
+      <p class="sidebar-footnote">A private workspace for your next opportunity.</p>
+    </aside>
+    <div class="app-main">
+      <header class="app-header"><p id="workspace-location">Workspace / Tailor CV</p><span class="local-label">Local workspace</span></header>
+      <main id="main-content" class="page-shell" tabindex="-1">
+        <div class="page-heading">
+          <p class="eyebrow" id="page-context">Your next opportunity</p>
+          <h1 id="page-title" tabindex="-1">Tailor CV</h1>
+          <p id="page-description" class="intro-copy">Understand the job, review your evidence and focus your CV.</p>
+        </div>
 
-    <nav class="workspace-navigation" aria-label="Workspace views">
-      <button id="show-workspace" type="button" aria-controls="workspace-view" aria-pressed="true">Experience bank &amp; job matching</button>
-      <button id="show-current-cv" type="button" aria-controls="current-cv-view" aria-pressed="false">My Current CV</button>
-    </nav>
-
-    <section id="workspace-view" class="workspace" aria-label="Experience bank and job matching">
-      <details id="bank-editor" class="bank-editor">
-        <summary>Experience bank <span id="bank-summary">Loading…</span> <span id="bank-state" role="status"></span></summary>
+    <section id="bank-view" class="workspace" aria-label="Experience Bank" hidden>
+      <details id="bank-editor" class="bank-editor" open>
+        <summary>Saved experience <span id="bank-summary">Loading…</span> <span id="bank-state" role="status"></span></summary>
       <form id="bank-form" class="panel" novalidate>
         <div class="results-heading">
           <div><p class="eyebrow">Source of truth</p><h2>Experience bank</h2></div>
@@ -47,30 +63,50 @@
       </form>
 
       </details>
+    </section>
 
+    <section id="workspace-view" class="workspace" aria-label="Tailor CV workspace">
+      <nav class="workflow-steps" aria-label="Tailoring workflow">
+        <button id="stage-analyse" type="button" aria-controls="analyse-stage" aria-current="step"><span class="step-number" aria-hidden="true">1</span>Analyse</button>
+        <button id="stage-match" type="button" aria-controls="match-stage" disabled><span class="step-number" aria-hidden="true">2</span>Match</button>
+        <button id="stage-tailor" type="button" aria-controls="tailor-stage" disabled><span class="step-number" aria-hidden="true">3</span>Tailor</button>
+      </nav>
+      <div id="job-context" class="results-heading job-context" hidden>
+        <div><p class="eyebrow">Target role</p><h2 id="results-title" tabindex="-1"></h2></div>
+        <button id="edit-job" class="secondary-button" type="button" aria-controls="job-editor">Edit job description</button>
+      </div>
+      <p id="workflow-state" class="workflow-state" role="status">Start with a job description. Match and Tailor become available after analysis.</p>
+      <p id="refresh-notice" class="notice" role="status" hidden></p>
+      <section id="analyse-stage" class="stage-content" aria-labelledby="analyse-stage-title">
       <details id="job-editor" class="bank-editor job-editor" open>
-        <summary>Job description — edit and rerun</summary>
+        <summary>Job description</summary>
       <form id="match-form" class="panel" novalidate>
-        <div class="results-heading"><div><p class="eyebrow">Job workspace</p><h2>Find your best evidence</h2></div></div>
+        <div class="results-heading"><div><p class="eyebrow">Step 1 / Understand the role</p><h2 id="analyse-stage-title">Start with the job.</h2></div></div>
         <label for="job-description">Job description</label>
         <p class="muted">Matching uses your saved experience bank.</p>
         <p id="saved-bank-notice" class="notice" role="status" hidden>Unsaved bank changes are excluded. Save your bank before matching to include them.</p>
         <textarea id="job-description" rows="12" placeholder="Paste the full job description here..." required></textarea>
         <p id="form-error" class="message error" role="alert" hidden></p>
-        <button id="analyse-button" type="submit"><span id="button-label">Analyse and match</span><span id="loading-label" hidden>Working...</span></button>
+        <button id="analyse-button" type="submit"><span id="button-label">Analyse Job</span><span id="loading-label" hidden>Analysing and matching…</span></button>
       </form>
 
       </details>
 
-      <section id="results" class="results" aria-labelledby="results-title" hidden>
-        <div class="results-heading"><div><p class="eyebrow">Your job match dashboard</p><h2 id="results-title" tabindex="-1"></h2></div><button id="edit-job" class="secondary-button" type="button" aria-controls="job-editor">Edit job description</button></div>
-        <p id="refresh-notice" class="notice" role="status" hidden></p>
+      <section id="analysis-result" class="results" aria-labelledby="overview-title" hidden>
         <section class="dashboard-section" aria-labelledby="overview-title">
           <h3 id="overview-title">Job overview</h3>
           <p class="muted">Selected requirements from the job description.</p>
           <div id="overview" class="overview-grid"></div>
           <details><summary>Full job analysis</summary><div id="full-analysis" class="overview-grid"></div></details>
         </section>
+        <div class="stage-actions"><p class="muted">Review the extracted requirements, then explore your supporting experience.</p><button id="continue-to-match" type="button" disabled>Continue to Match <span aria-hidden="true">→</span></button></div>
+      </section>
+      </section>
+
+      <section id="match-stage" class="stage-content" aria-labelledby="match-stage-title" hidden>
+        <div class="stage-heading"><div><p class="eyebrow">Step 2 / Review the evidence</p><h2 id="match-stage-title">Your experience, in context.</h2></div><button id="match-generate-preview" type="button" disabled>Generate Tailored CV Preview</button></div>
+        <p id="match-empty" class="empty-state" role="status">Your evidence matches will appear here when matching is ready.</p>
+        <section id="results" class="results" aria-label="Job matching results" hidden>
         <section class="dashboard-section" aria-labelledby="strengths-title">
           <h3 id="strengths-title">Your strengths and gaps</h3>
           <p class="muted">Support found in your saved experience bank. Missing evidence does not establish a lack of experience.</p>
@@ -83,15 +119,43 @@
         </section>
         <details class="diagnostics"><summary>Full matching diagnostics</summary><p class="muted">Original analysis and matching responses, including all signals, explanations and ranking scores.</p><pre id="diagnostics"></pre></details>
       </section>
+      </section>
+
+      <section id="tailor-stage" class="stage-content" aria-labelledby="tailoring-title" hidden>
+      <section id="tailoring-preview" class="tailoring-panel" aria-labelledby="tailoring-title" hidden>
+        <div class="results-heading">
+          <div><p class="eyebrow">Read-only recommendation</p><h2 id="tailoring-title">Tailored CV Preview</h2></div>
+          <button id="generate-tailored-preview" type="button" disabled>Generate Tailored CV Preview</button>
+        </div>
+        <p class="muted">Uses your saved Current CV and Experience Bank. Unsaved edits are excluded. Nothing here is saved or applied.</p>
+        <p id="tailoring-target" class="cv-source-text"></p>
+        <p id="tailoring-state" class="message" role="status"></p>
+        <p id="tailoring-error" class="message error" role="alert" hidden></p>
+        <div id="tailoring-output" hidden>
+          <div id="tailoring-warnings" class="notice" role="status" hidden></div>
+          <article id="tailored-cv-content" class="cv-preview" aria-label="Proposed CV content"></article>
+          <section class="dashboard-section" aria-labelledby="tailoring-coverage-title">
+            <h3 id="tailoring-coverage-title">Requirement coverage</h3>
+            <p class="muted">Bank evidence and selected CV content are different. Skills are recorded labels; education and certifications stay in their own sections.</p>
+            <div id="tailoring-coverage"></div>
+          </section>
+          <details class="tailoring-changes">
+            <summary>Selection explanations &amp; changes</summary>
+            <p class="muted">Retained and recommended describe selection. Strong and related describe evidence support. Omitted content appears only here.</p>
+            <div id="tailoring-decisions"></div>
+          </details>
+        </div>
+      </section>
+      </section>
     </section>
 
     <section id="current-cv-view" class="workspace" aria-labelledby="current-cv-title" hidden>
       <form id="current-cv-form" class="panel" novalidate>
         <div class="results-heading">
-          <div><p class="eyebrow">Your saved selections</p><h2 id="current-cv-title" tabindex="-1">My Current CV</h2></div>
+          <div><p class="eyebrow">Your saved selections</p><h2 id="current-cv-title" tabindex="-1">My CV</h2></div>
           <button id="save-current-cv" type="submit" disabled>Save Current CV</button>
         </div>
-        <p class="muted">Choose from your saved experience bank. Unsaved bank edits are excluded. The preview follows your current selections; use Save Current CV to keep your changes.</p>
+        <p class="muted">Choose your baseline CV content from the saved Experience Bank. Unsaved bank edits are excluded. My CV uses the existing Current CV settings; use Save Current CV to keep your changes.</p>
         <p id="current-cv-state" role="status">Not loaded</p>
         <div id="current-cv-message" class="message" role="status"></div>
         <button id="retry-current-cv" class="secondary-button" type="button" hidden>Retry loading</button>
@@ -116,7 +180,7 @@
           </section>
           <section aria-labelledby="cv-settings-title">
             <h3 id="cv-settings-title">Tailoring Settings</h3>
-            <p class="muted">For future automated tailoring only. These limits do not change your manually selected content. Leave blank for no limit (unrestricted); zero excludes that content from future tailoring.</p>
+            <p class="muted">Used when generating a Tailored CV Preview. These limits do not change your manually selected content. Leave blank for no limit; zero excludes that content from the tailored selection.</p>
             <div id="cv-tailoring-settings" class="cv-settings-grid"></div>
           </section>
         </fieldset>
@@ -127,6 +191,8 @@
         <div id="cv-preview-content"></div>
       </section>
     </section>
-  </main>
+      </main>
+    </div>
+  </div>
 </body>
 </html>

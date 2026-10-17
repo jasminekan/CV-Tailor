@@ -430,3 +430,170 @@ class CurrentCVLoadResponse(BaseModel):
 
     current_cv: CurrentCV
     reference_issues: list[CurrentCVReferenceIssue] = Field(default_factory=list)
+
+
+class _CVCandidateModel(BaseModel):
+    """In-memory candidate snapshots; not part of either saved document schema."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CVBulletCandidate(_CVCandidateModel):
+    source_type: Literal["achievement", "project_evidence"]
+    parent_id: str
+    evidence: EvidenceItem
+    # Both positions are local to the owning role/project; None is an alternative.
+    bank_position: int = Field(ge=0)
+    current_cv_position: int | None = Field(default=None, ge=0)
+
+    @property
+    def is_currently_selected(self) -> bool:
+        return self.current_cv_position is not None
+
+
+class CVWorkRoleCandidate(_CVCandidateModel):
+    """A valid baseline role and its eligible achievements, never a new role."""
+
+    source_type: Literal["work_experience"] = "work_experience"
+    role: WorkExperience
+    bank_position: int = Field(ge=0)
+    current_cv_position: int = Field(ge=0)
+    achievements: list[CVBulletCandidate] = Field(default_factory=list)
+
+
+class CVProjectCandidate(_CVCandidateModel):
+    source_type: Literal["project"] = "project"
+    project: Project
+    bank_position: int = Field(ge=0)
+    current_cv_position: int | None = Field(default=None, ge=0)
+    contributions: list[CVBulletCandidate] = Field(default_factory=list)
+
+    @property
+    def is_currently_selected(self) -> bool:
+        return self.current_cv_position is not None
+
+
+class CVSkillCandidate(_CVCandidateModel):
+    """An explicit catalogue entry; its key is not a matcher evidence ID."""
+
+    source_type: Literal["skill"] = "skill"
+    skill_key: str
+    label: str
+    # Order in build_skill_catalogue(), which retains first-source labels.
+    bank_position: int = Field(ge=0)
+    current_cv_group_index: int | None = Field(default=None, ge=0)
+    current_cv_group_name: str | None = None
+    current_cv_position: int | None = Field(default=None, ge=0)
+
+    @property
+    def is_currently_selected(self) -> bool:
+        return self.current_cv_position is not None
+
+
+class CVCandidateIndex(_CVCandidateModel):
+    # Keep the full baseline, including unavailable references and empty groups.
+    baseline: CurrentCV
+    work_experience: list[CVWorkRoleCandidate] = Field(default_factory=list)
+    projects: list[CVProjectCandidate] = Field(default_factory=list)
+    skills: list[CVSkillCandidate] = Field(default_factory=list)
+    # These are context/review records, not selectable work/project bullets.
+    out_of_baseline_work_experience: list[WorkExperience] = Field(default_factory=list)
+    education: list[Education] = Field(default_factory=list)
+    certifications: list[Certification] = Field(default_factory=list)
+    additional_evidence: list[EvidenceItem] = Field(default_factory=list)
+    reference_issues: list[CurrentCVReferenceIssue] = Field(default_factory=list)
+
+    @property
+    def tailoring_settings(self) -> TailoringSettings:
+        return self.baseline.tailoring_settings
+
+
+CVSelectionReason = Literal[
+    "new_strong_coverage", "stronger_coverage", "new_related_coverage",
+    "better_evidence_quality", "baseline_retained", "limit_reached",
+    "exact_duplicate", "repetitive_evidence", "no_relevant_support",
+    "declaration_only", "already_covered", "invalid_reference", "project_not_selected",
+    "required_explicit_skill", "demonstrated_skill", "supporting_technology",
+    "relevant_explicit_skill", "equivalent_skill", "unchanged_credential",
+]
+
+
+class CVSelectionDecision(_CVCandidateModel):
+    source_type: Literal["work_experience", "achievement", "project", "project_evidence", "skill", "education", "certification"]
+    source_id: str
+    parent_id: str | None = None
+    selected: bool
+    was_in_current_cv: bool
+    reason_codes: list[CVSelectionReason] = Field(min_length=1)
+    marginal_requirement_ids: list[str] = Field(default_factory=list)
+    evidence_support: list[EvidenceSupport] = Field(default_factory=list)
+    # A project's bundle can include these children; its evidence_support still
+    # describes only the project itself, never borrowed contribution evidence.
+    bundle_evidence_ids: list[str] = Field(default_factory=list)
+    duplicate_of: str | None = None
+
+
+class CVRequirementCoverage(_CVCandidateModel):
+    requirement_id: str
+    requirement_details: StructuredRequirement | None = None
+    bank_status: Literal["strong", "related", "missing"]
+    selected_status: Literal["strong", "related", "not_selected"]
+    selected_evidence_ids: list[str] = Field(default_factory=list)
+    meaningful_evidence_ids: list[str] = Field(default_factory=list)
+
+
+class CVWorkProjectSelection(_CVCandidateModel):
+    proposed_cv: CurrentCV
+    decisions: list[CVSelectionDecision] = Field(default_factory=list)
+    coverage_scope: Literal["work_and_projects"] = "work_and_projects"
+    coverage: list[CVRequirementCoverage] = Field(default_factory=list)
+    # Credentials keep their existing display order, outside competitive selection.
+    education_ids: list[str] = Field(default_factory=list)
+    certification_ids: list[str] = Field(default_factory=list)
+    reference_issues: list[CurrentCVReferenceIssue] = Field(default_factory=list)
+    warnings: list[Literal["baseline_reference_issues", "matching_metadata_unavailable", "ambiguous_skill_identity"]] = Field(default_factory=list)
+
+
+class CVSkillRelevance(_CVCandidateModel):
+    """Why an explicit label is relevant; no new engineering match classification."""
+
+    requirement_id: str
+    kind: Literal["explicit_requirement", "technical_relationship", "supporting_technology"]
+    evidence_ids: list[str] = Field(default_factory=list)
+    demonstrated_evidence_ids: list[str] = Field(default_factory=list)
+
+
+class CVRecommendation(CVSelectionDecision):
+    original_text: str | None = None
+    group_name: str | None = None
+    previous_group_name: str | None = None
+    supported_requirement_ids: list[str] = Field(default_factory=list)
+    requirement_importance: dict[str, RequirementImportance] = Field(default_factory=dict)
+    support_basis: list[Literal[
+        "catalogue_declaration", "demonstrated_wording", "wording", "outcome",
+        "standalone_skill", "skill_tag", "technology_tag", "credential",
+        "technical_relationship", "selected_content_association", "baseline",
+    ]] = Field(default_factory=list)
+    recommendation: str
+    skill_relevance: list[CVSkillRelevance] = Field(default_factory=list)
+
+
+class CVSkillRequirementCoverage(_CVCandidateModel):
+    """Selected labels relevant to an obligation, not proof of its engineering activity."""
+
+    requirement_id: str
+    selected_skill_keys: list[str] = Field(default_factory=list)
+
+
+class CVSelectionResult(CVWorkProjectSelection):
+    decisions: list[CVRecommendation] = Field(default_factory=list)
+    # The inherited coverage remains work/project coverage with its original
+    # statuses. Explicit skill labels are reported separately, without upgrading it.
+    skill_coverage: list[CVSkillRequirementCoverage] = Field(default_factory=list)
+
+
+class TailoringPreviewResponse(CVSelectionResult):
+    """Read-only recommendation plus the matching and original-content snapshot."""
+
+    matching_result: ExperienceBankMatch
+    source_bank: ExperienceBank

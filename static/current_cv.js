@@ -7,8 +7,6 @@
   const retryButton = find("#retry-current-cv");
   const message = find("#current-cv-message");
   const warnings = find("#current-cv-warnings");
-  const workspaceButton = find("#show-workspace");
-  const cvButton = find("#show-current-cv");
   let bank = null;
   let draft = null;
   let baseline = null;
@@ -161,8 +159,7 @@
     form.setAttribute("aria-busy", String(busy));
     retryButton.hidden = ready();
     retryButton.disabled = busy;
-    workspaceButton.disabled = savingCV;
-    cvButton.disabled = savingCV;
+    window.dispatchEvent(new CustomEvent("current-cv-controls-changed"));
     find("#current-cv-state").textContent = savingCV ? "Saving…" : loading ? "Loading…" : !ready() ? "Loading incomplete — saving disabled" : dirty() ? "Unsaved changes" : "Saved";
   }
 
@@ -637,18 +634,9 @@
     }
   });
 
-  function showView(currentCV) {
-    find("#workspace-view").hidden = currentCV;
-    find("#current-cv-view").hidden = !currentCV;
-    workspaceButton.setAttribute("aria-pressed", String(!currentCV));
-    cvButton.setAttribute("aria-pressed", String(currentCV));
-    if (currentCV) {
-      find("#current-cv-title").focus();
-      load();
-    }
-  }
-  workspaceButton.addEventListener("click", () => { if (!savingCV) showView(false); });
-  cvButton.addEventListener("click", () => { if (!savingCV) showView(true); });
+  window.addEventListener("workspace-view-changed", event => {
+    if (event.detail.view === "cv") load();
+  });
   retryButton.addEventListener("click", load);
   window.addEventListener("experience-bank-saved", event => {
     setBank(event.detail);

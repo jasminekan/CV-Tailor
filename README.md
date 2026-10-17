@@ -1,4 +1,4 @@
-# JobMatch CV Tailor — V3.2
+# JobMatch CV Tailor — V3.4 workspace redesign
 
 JobMatch CV Tailor is a local FastAPI application for maintaining an experience
 bank, manually assembling a Current CV, and analysing job descriptions against
@@ -26,14 +26,18 @@ selected by reference; the application does not generate or rewrite their text.
 - Nonblank input/output validation, bank ID uniqueness, rejection of unknown bank
   fields and unsupported versions, safe rendering of stored values, and a guard
   against saving before the bank has loaded.
-- A separate My Current CV view for selecting, removing and ordering work roles,
+- A separate My CV view (the existing Current CV builder) for selecting, removing and ordering work roles,
   projects and their original bullet points using up/down buttons.
 - Custom skills groups with unique headings and skill selection across all
   explicit bank tags, plus recovery from unavailable references.
-- Four saved tailoring maximums (preferences only) and a read-only draft preview
+- Four saved tailoring maximums used by automated selection, and a read-only draft preview
   showing all existing education and certifications from the saved bank.
 - Separate JSON persistence and GET/PUT endpoints for the Current CV, with
   structural validation, parent ownership checks and broken-reference reporting.
+- Deterministic work, project and explicit skill selection with provenance,
+  requirement coverage and a read-only tailored preview using original content.
+- A professional workspace shell with sidebar management destinations, three
+  job-workflow stages, preserved drafts and an explicit New Analysis action.
 
 ## Requirements and setup
 
@@ -148,6 +152,7 @@ before sending it. Back up existing banks manually.
 | GET | `/current-cv` | Loads the Current CV and reports reference issues |
 | PUT | `/current-cv` | Validates structure and bank references, then replaces the Current CV |
 | POST | `/match` | Matches an analysis against the saved bank; no OpenAI call |
+| POST | `/tailoring/preview` | Read-only CV content recommendations from an existing analysis; no saving or OpenAI call |
 
 For Postman, use raw JSON bodies and `Content-Type: application/json`.
 
@@ -346,7 +351,7 @@ exercise browser layout, native controls, keyboard focus or accessibility.
 
 ## My Current CV builder (Phase 5)
 
-Use the workspace navigation to open **My Current CV**. The builder loads the
+Use **My CV** in the sidebar to open the existing Current CV builder. It loads the
 saved bank and CV separately and keeps its draft independent from bank-editor
 edits. Choose a role or project, then select its original achievements or
 contributions. Duplicate selections are excluded. Use Remove, Move Up and Move
@@ -390,7 +395,7 @@ CURRENT_CV_PATH="$cv_check_dir/current_cv.json" \
 ```
 
 - At `http://127.0.0.1:8001`, save fictional roles/projects with several bullets
-  in the bank editor. In My Current CV, add selections, check parent-specific
+  in the bank editor. In My CV, add selections, check parent-specific
   options and duplicates, reorder them, save and reload the browser.
 - Check both navigation buttons, keyboard controls, focus after moves, long
   bullet text, and the layout on a narrow screen.
@@ -794,3 +799,663 @@ The completed manual review of the seven-requirement description against the
 reviewed Experience Bank produced 4 strong, 1 related and 2 missing requirements.
 That result depends on the recorded bank evidence; it is not a universal expected
 result for other banks or a guarantee of future live extraction quality.
+
+## CV selection foundation — V3.3.1
+
+`build_cv_candidates(bank, current_cv=None)` in `app/services/cv_candidates.py`
+returns a typed `CVCandidateIndex` from validated Experience Bank and Current CV
+models. It is an in-memory discovery service, without matching, ranking, content
+selection, automatic grouping, an endpoint or a tailoring UI. It neither loads nor
+saves files and makes no provider calls.
+
+```python
+from app.services.cv_candidates import build_cv_candidates
+
+index = build_cv_candidates(bank, current_cv)
+settings = index.tailoring_settings
+reference_issues = index.reference_issues
+```
+
+The candidate models in `app/models.py` wrap existing source models rather than
+copying their fields into a new CV format:
+
+| Index field | Contents and order |
+| --- | --- |
+| `baseline` | Independent copy of the full Current CV, including stale references, original skill groups and tailoring settings |
+| `work_experience` | `CVWorkRoleCandidate` records for valid baseline roles, in Current CV order; each has its original `role` and every eligible achievement |
+| `projects` | `CVProjectCandidate` records for every bank project, in bank order; `project` retains the description/link separately from its contributions |
+| `skills` | `CVSkillCandidate` records in `build_skill_catalogue()` order, with canonical keys and original labels |
+| `out_of_baseline_work_experience` | Other original work roles in bank order, for review only |
+| `education`, `certifications` | Original records and IDs in bank order, separate from bullet candidates |
+| `additional_evidence` | Original records for review, without assignment to a work role or project |
+| `reference_issues` | Existing `CurrentCVReferenceIssue` results in validation order |
+
+Each `CVBulletCandidate` holds its original `EvidenceItem` as `evidence`, plus
+`source_type` (`achievement` or `project_evidence`), `parent_id`, `bank_position`
+and nullable `current_cv_position`. Its source ID and exact wording are
+`candidate.evidence.id` and `candidate.evidence.text`; local skills, technologies
+and outcomes are preserved too. Parent summaries are not achievement candidates,
+project descriptions are not contributions, and parent tags never become child
+tags. Identical wording with different IDs is retained; semantic deduplication is
+deferred.
+
+All positions are zero-based. Roles/projects retain their bank positions and
+their separate Current CV positions. Children retain bank order within their
+parent, with their original baseline bullet positions available for later ties.
+`is_currently_selected` is a Python property derived from a non-null Current CV
+position; position zero is selected, and null identifies an available alternative.
+Every indexed work role is already a valid baseline role. Skill candidates also
+retain the original group index, group name and position within that group.
+
+Skill identity uses the existing catalogue and `normalise_skill_key()` rules:
+case and whitespace are normalised for keys, punctuation and original labels
+are preserved. C, C++ and C# remain separate; matching aliases such as JS and
+JavaScript are not merged here. Explicit tags from the entire bank remain
+available, including tags on roles outside the baseline. Technical relationships,
+record titles, source wording and outcomes cannot create selectable skills.
+Unselected skills have no assigned group; existing empty groups remain in the
+baseline. Automatic placement into an unambiguous existing group or an Additional
+Skills fallback belongs to a later phase.
+
+`validate_current_cv_references()` reports missing or wrong-parent references.
+Invalid references remain in `index.baseline` and its issues, without inventing
+candidates or relocating children. Valid baseline positions retain gaps caused by
+stale entries. A missing/None Current CV is an empty baseline: no work roles are
+automatically added, but all projects and explicit skills remain discoverable.
+Empty bank/section/parent selections are supported.
+
+All four settings are available through `index.tailoring_settings` without
+enforcement: null means no numerical maximum, zero means no future selection of
+that content type, and positive integers are ceilings rather than quotas.
+Candidate discovery is unchanged even when every limit is zero. Later selection
+will prioritise demonstrated relevance while allowing useful baseline content
+to remain when capacity permits; this phase makes neither decision.
+
+The result is independent of both input documents, including nested source
+records, settings and groups. Editing the result cannot update either input or a
+saved document. The persisted schemas, existing REST responses, Current CV
+preview, V3.2 matching and relationship catalogue remain unchanged.
+
+## Work and project selection — V3.3.2
+
+`select_work_and_projects(index, matches)` in `app/services/cv_selection.py` is a
+pure service consuming a `CVCandidateIndex` and an existing `ExperienceBankMatch`.
+It returns `CVWorkProjectSelection` with proposed references and controlled
+decisions. It never runs the matcher, calls OpenAI, loads/saves files, adds a work
+role or changes original wording. No tailoring endpoint or UI is added yet.
+Build the candidate index and matching result from the same bank snapshot; this
+service has no persisted revision tokens with which to detect stale matches.
+
+```python
+from app.services.cv_candidates import build_cv_candidates
+from app.services.cv_selection import select_work_and_projects
+
+index = build_cv_candidates(bank, current_cv)
+result = select_work_and_projects(index, matching_result)
+proposed_work = result.proposed_cv.work_experience
+proposed_projects = result.proposed_cv.projects
+```
+
+The selector uses individual `EvidenceSupport` records, not a requirement's
+bank-wide status or aggregate rank. Repeated `(evidence ID, requirement ID)`
+records, including multiple OR alternatives, resolve to one best support. Existing
+alternative order breaks equivalent option ties. Strong activity/wording and
+related activity/wording have distinct provenance priorities; declarations alone
+cannot introduce a new bullet or project. Transferable support stays related.
+The selector does not parse diagnostic explanations or infer unrecorded actions.
+
+Each valid baseline work role gets two passes, independently under its achievement
+limit. The greedy pass compares marginal coverage after every selection:
+
+1. New strong support for an uncovered requirement.
+2. Improvement from related to strong support.
+3. New meaningful related support.
+4. Better recorded evidence quality within an existing classification.
+
+Within each category, demonstrated activity precedes wording-only support, and
+required precedes unspecified then preferred at equivalent quality. Counts of
+distinct improvements precede the existing 10/3 coverage total. That secondary
+total is reconstructed once per requirement from the support records, avoiding
+duplicate/OR inflation; matching weights and classifications are unchanged.
+Remaining ties use Current CV membership and position, bank position, then source
+ID. These are ordered comparisons, not new arbitrary scoring weights.
+
+The second pass retains nonduplicate baseline bullets in remaining slots, even
+when they do not match a job requirement. Unrelated or declaration-only new bank
+bullets are not used as fillers. Roles stay in Current CV order. Selected baseline
+bullets retain their reading order; selected alternatives follow in bank order.
+Thus useful testing, delivery or ownership content can remain without inventing
+job-specific support. With no useful matching decisions, this becomes baseline
+preservation under the configured limits.
+
+Retained role summaries remain visible context, with their own role-ID decisions
+and coverage. They are never inserted into achievement lists or attributed to
+child bullets. Achievement selection evaluates coverage independently within each
+role; project competition also sees support from the retained role context.
+
+Projects compete after work selection. Each proposed bundle contains the
+project's own description and a capped set of contributions; each requirement
+contributes only its best support, regardless of contribution count. Contribution
+selection uses the same relevance-first, baseline-retention passes. Description
+evidence remains on the project ID and never becomes a contribution claim.
+Bundles are recomputed against selected work and project coverage after every
+choice. New projects adding no improvement are not added just to fill space;
+existing useful projects can still be retained for context despite overlap.
+Projects with new/improved coverage come first, followed by retained baseline
+projects in Current CV order. Contributions follow the same baseline/bank reading
+order rule as work bullets.
+
+Achievement limits apply per role, project limits count project cards, and
+contribution limits apply per selected project. Null remains unbounded, zero
+selects none of that content, and positive values are ceilings. Role headers stay
+even with zero achievements. A relevant project description can justify a project
+with zero contributions; contribution support alone cannot justify that project
+when contributions are disallowed. Unbounded limits never fill with unrelated
+new content. This work/project selector copies skill groups and `max_skills`
+unchanged; the V3.3.3 workflow below handles skill selection.
+
+Duplicate checks compare within one parent only. Case/whitespace-equivalent
+recorded text is suppressed when technologies and outcomes also agree. Near
+duplicates require the same ordered technical tokens after removing articles and
+limited punctuation, the same requirements/activities, and agreeing technologies
+and outcomes. Signs, currencies, percentages, C/C++/C#, numerical changes and
+different outcomes are preserved. There is no synonym expansion, edit-distance
+threshold or semantic search. Ambiguous distinctions are kept rather than erased,
+so manual review may still find repetitive wording across contexts or records
+with differing metadata. Comparison never edits displayed text.
+
+`result.proposed_cv` reuses `CurrentCV` and its existing work/project reference
+models. The other result fields are:
+
+| Field | Meaning |
+| --- | --- |
+| `decisions` | Selected/omitted candidates and unavailable baseline references, with source/parent IDs, baseline membership, reason codes and original per-record support |
+| `coverage` | Original bank status alongside selected work/project status and supporting IDs, with declaration-only records distinguished from meaningful evidence |
+| `coverage_scope` | `work_and_projects`; these results do not claim full-CV or candidate compatibility coverage |
+| `education_ids`, `certification_ids` | Unchanged bank-order references, outside competitive ranking |
+| `reference_issues`, `warnings` | Original reference issues and controlled warnings for stale baseline references or incomplete matching metadata |
+
+Selected project decisions expose `bundle_evidence_ids`, but their own
+`evidence_support` still belongs only to the project description. Child decisions
+retain each child's own support. Reason codes distinguish `new_strong_coverage`,
+`stronger_coverage`, `new_related_coverage`, `better_evidence_quality`,
+`baseline_retained`, `limit_reached`, `exact_duplicate`, `repetitive_evidence`,
+`already_covered`, `declaration_only`, `no_relevant_support`,
+`project_not_selected` and `invalid_reference`. Marginal requirement IDs identify
+which obligations caused a relevance selection.
+
+Stale/wrong-parent baseline bullet references are reported and blocked from
+automatic relocation, including selection under a different parent. Fix those
+references explicitly before reconsidering the affected content. Empty baselines
+do not add work roles, but relevant projects remain eligible. Legacy job analyses
+work through the existing prepared matcher output; results with only old aggregate
+fields cannot establish per-record relevance, so preserve the baseline and emit a
+metadata warning instead of guessing.
+
+The result is independent of its inputs. It is not saved or applied, skills are
+not ranked or regrouped by this work/project service, and education/certifications
+keep their current display behaviour. Outcome-origin support remains explicitly
+identified as such; no outcome is appended to the original CV bullet. Greedy
+selection is intentionally not a global optimum, and work-role coverage is
+evaluated per role to preserve career breadth before projects compete against
+their combined coverage. The following workflow adds skills and explanations.
+
+## Skills and recommendation explanations — V3.3.3
+
+`select_cv_content(index, matches)` in `app/services/cv_skills.py` calls the
+existing work/project selector, preserves its decisions, then selects explicit
+skills and returns `CVSelectionResult`. This remains a pure, read-only service:
+no endpoint, UI, matching pass, rewriting, file loading or saving is introduced.
+Use the same Experience Bank snapshot for the candidate index and matching result.
+
+```python
+from app.services.cv_skills import select_cv_content
+
+result = select_cv_content(index, matching_result)
+proposed_cv = result.proposed_cv
+recommendations = result.decisions
+```
+
+Only entries in the candidate index's existing `build_skill_catalogue()` are
+eligible. Canonical Current CV keys and original display labels are preserved;
+relationship targets, wording and qualifications cannot create new skills.
+The selector reuses existing equivalent terminology, per-record support,
+selected alternatives, importance, activities and relationship provenance.
+An optional `catalogue=` argument accepts an already validated
+`TechnicalRelationshipCatalogue` for additional equivalent aliases, such as
+Microsoft Azure/Azure. It is never loaded by the service; edges are never
+traversed. Pass the same preloaded catalogue used for matching when needed.
+
+Selection compares these priorities without adding scoring weights:
+
+1. Explicit skills named in required requirements that no selected skill represents.
+2. Skills with relevant skill-specific demonstrated wording or outcomes.
+3. Explicit supporting technologies meaningfully associated with selected content.
+4. Other relevant explicit skills, preferring distinct requirement coverage;
+   equivalent quality favours required, unspecified, then preferred requirements.
+5. Valid baseline skills in remaining capacity, preserving baseline order.
+
+Within a priority, skill-specific evidence quality precedes coverage breadth;
+Current CV membership/position, catalogue position and canonical key break ties.
+An OR group remains one obligation. After Python represents Python OR Java, a
+useful supporting framework can take precedence over Java when slots are scarce;
+Java remains eligible if explicitly recorded and space permits. Equivalent skill
+labels such as JS/JavaScript select only one original catalogue entry. Technical
+punctuation is preserved, including C/C++/C# and CI/CD versus CI CD.
+
+A required declared skill can be selected without practical proof. Its
+recommendation explicitly says practical use is not established. Tags and
+certificates do not demonstrate engineering activities; transferable support
+stays related, and FastAPI-to-Python support does not prove Python proficiency.
+A supporting technology needs its own technology tag on a selected record,
+meaningful matching support, and a positive mention in that record's supported
+wording/outcome field. Parent tags are not inherited. This is a conservative
+association, with a practical-use caveat, rather than new technical matching.
+It can omit useful associations that the available metadata does not establish.
+
+Matcher `skill:…` evidence IDs are mapped only from actual skill-source references
+to one unambiguous explicit catalogue key. These IDs are not saved CV keys.
+Punctuation collisions (for example CI/CD and CI CD) or collisions with real
+record IDs are ignored for attribution and emit `ambiguous_skill_identity`.
+Direct named relevance remains available independently. Older matching results
+without per-record support retain the existing metadata warning; diagnostic
+prose is never parsed to invent skill evidence or importance.
+
+`max_skills` applies across all groups: null is unbounded, zero selects no skills,
+and a positive number is a ceiling. Unrelated new skills never fill unused slots.
+Baseline groups retain their original names/order and selected baseline skills
+retain relative order. A new skill joins an existing group only when equivalent
+baseline membership identifies exactly one group. Otherwise it joins one
+`Additional skills` group, reusing an existing case/whitespace-equivalent group
+without renaming it. No technology taxonomy is guessed, duplicate equivalent
+labels are omitted, and empty groups disappear from the proposal. Stale baseline
+keys remain reported as unavailable decisions/reference issues; nothing is saved
+or repaired. An available equivalent label may be proposed in the original group.
+
+Every work/project/skill decision includes controlled reasons, original text or
+null for an unavailable reference, source/parent IDs, baseline membership,
+selected state, supported requirement IDs, importance, support origins and a
+concise deterministic `recommendation`. Original `evidence_support`, including
+classifications, activities, relationship directions and diagnostic caveats, is
+preserved. Read those original explanations for qualifications such as API
+development without demonstrated maintenance. Project bundle requirement IDs
+may reference children; each record's raw support still belongs to that record.
+Education/certifications get `unchanged_credential` recommendations and retain
+bank order outside competition. Their baseline membership reflects the existing
+preview's implicit inclusion, since Current CV has no credential selection fields.
+
+`skill_relevance` identifies explicit-requirement, technical-relationship or
+supporting-technology relevance, with exact evidence IDs and skill-specific
+demonstrated IDs. `skill_coverage` lists selected labels relevant to each
+requirement; it assigns no engineering match classification. Existing `coverage`
+and `coverage_scope="work_and_projects"` remain unchanged: bank status, selected
+work/project support and selected skill labels are distinct. Exclusion by a
+section limit never changes the bank-wide matching result.
+
+For the reviewed seven-requirement backend description, a synthetic bank with
+explicit Python, Oracle Database, SQL, FastAPI and Testing entries, practical
+Oracle and Python/FastAPI API bullets, and `max_skills=5` proposes Python in its
+original Languages group, Testing retained in Engineering, and Oracle Database,
+FastAPI and SQL in Additional skills. AWS and Java are not inferred. This is an
+offline selection example, not a claim about live extraction or every saved bank.
+
+Results are independent deep copies. Conservative grouping and local supporting
+associations may need manual review in the V3.3.5 frontend; there is no semantic
+search, broad taxonomy, automatic application or global optimisation.
+
+## Read-only tailoring preview API — V3.3.4
+
+`POST /tailoring/preview` recommends existing CV content for an already-extracted
+job analysis. It reuses `/match`'s `MatchRequest` input and accepts both legacy
+five-field analyses and structured requirements. It produces content
+recommendations, not a candidate compatibility score. No OpenAI call is made.
+
+For example, a legacy request is:
+
+```json
+{
+  "job_analysis": {
+    "job_title": "Software Engineer",
+    "technical_skills": ["Python or Java", "Relational databases"],
+    "other_keywords": [],
+    "responsibilities": [],
+    "qualifications": []
+  }
+}
+```
+
+A structured request uses the same wrapper. Omit the legacy lists or supply the
+exact projection of the structured requirements, as for `/match`. Structured
+requirements remain authoritative; contradictory lists return 422. For example,
+start the local server with `.venv/bin/python -m uvicorn app.main:app --reload`,
+then send this request (or use the endpoint in `http://127.0.0.1:8000/docs`):
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/tailoring/preview \
+  -H 'Content-Type: application/json' --data-binary @- <<'JSON'
+{
+  "job_analysis": {
+    "job_title": "Software Engineer",
+    "requirements": [
+      {
+        "id": "r1",
+        "text": "Python or Java",
+        "source_text": "Candidates must have experience with Python or Java.",
+        "category": "skill",
+        "importance": "required",
+        "alternatives": ["Python", "Java"],
+        "activity": null
+      }
+    ]
+  }
+}
+JSON
+```
+
+The route loads the saved bank and Current CV once each, then:
+
+1. Loads one validated relationship catalogue for matching and skill aliases.
+2. Calls `build_cv_candidates(bank, current_cv)`.
+3. Calls `match_experience_bank(bank, job_analysis, catalogue=catalogue)` on that
+   same loaded bank snapshot.
+4. Calls `select_cv_content(index, matches, catalogue=catalogue)`.
+5. Returns `TailoringPreviewResponse`, extending `CVSelectionResult` without
+   duplicating any matching, coverage or ranking calculations.
+
+The response exposes these fields:
+
+| Field | Purpose |
+| --- | --- |
+| `proposed_cv` | Existing Current CV reference structure with selected achievements, projects, contributions, skill keys and unchanged tailoring settings |
+| `decisions` | Existing recommendation metadata: original text, ownership, baseline membership, selection state, reasons, requirement importance, raw evidence/provenance and selected alternatives |
+| `matching_result` | Complete bank-wide `ExperienceBankMatch`, including all requirements, statuses and ranked evidence |
+| `coverage`, `coverage_scope` | Existing selected work/project support alongside original bank status; scope remains `work_and_projects` |
+| `skill_coverage` | Selected explicit labels relevant to each requirement, without claiming demonstrated engineering activity |
+| `source_bank` | The original loaded `ExperienceBank` snapshot, including exact labels, wording, role headers/dates, project names/links, outcomes and credentials |
+| `education_ids`, `certification_ids` | Existing unchanged credential display references |
+| `reference_issues`, `warnings` | Existing unavailable/wrong-parent reference reports and controlled selection warnings |
+
+`source_bank` is the complete input snapshot, including omitted content, rather
+than a generated CV. The frontend can resolve `proposed_cv` IDs against it without
+a second bank fetch that might return different data. Bullet/outcome fields stay
+separate: an outcome is never appended to a selected bullet. Skill labels are
+also available as the skill decisions' `original_text`. No new display prose,
+HTML or CV document is generated by the endpoint.
+
+For the reviewed seven-requirement backend description, the isolated API fixture
+in `tests/test_tailoring_preview_api.py` returns the following abridged selection
+(the complete response also contains decisions, matching and source content):
+
+```json
+{
+  "proposed_cv": {
+    "schema_version": 1,
+    "work_experience": [
+      {"work_experience_id": "role-b", "achievement_ids": ["general"]},
+      {"work_experience_id": "role-a", "achievement_ids": ["testing", "oracle"]}
+    ],
+    "projects": [{"project_id": "jobmatch", "contribution_ids": ["api"]}],
+    "skill_groups": [
+      {"name": "Languages", "skill_keys": ["python"]},
+      {"name": "  Engineering  ", "skill_keys": ["testing"]},
+      {"name": "Additional skills", "skill_keys": ["oracle database", "fastapi", "azure ai search", "sql"]}
+    ],
+    "tailoring_settings": {
+      "max_achievements_per_role": 2,
+      "max_contributions_per_project": 1,
+      "max_projects": 1,
+      "max_skills": 6
+    }
+  },
+  "coverage_scope": "work_and_projects",
+  "education_ids": ["degree"],
+  "certification_ids": ["cert"],
+  "reference_issues": [],
+  "warnings": []
+}
+```
+
+That synthetic bank produces 4 strong, 1 related and 2 missing requirements.
+Practical Oracle content replaces weaker baseline database content; testing and
+the earlier role's baseline content remain. The API project replaces an unrelated
+baseline project. Python represents the language OR group without adding Java;
+Azure AI Search does not create AWS/Azure skills or cloud deployment experience.
+The preferred degree remains in Education: its bank status is strong while its
+work/project coverage is `not_selected`. Collaboration and cloud deployment stay
+missing. This is an offline fixture result, not live extraction verification or
+a claim about every saved Experience Bank.
+
+Preview never calls repository save methods, writes either JSON store, creates
+missing stores, changes settings/references, accepts recommendations or rewrites
+content. Missing bank/CV files use the repositories' empty defaults. An empty
+Current CV introduces no work roles, but relevant projects and explicit skills
+remain eligible under the existing selector. No matches or empty requirements
+retain valid baseline content within the configured limits. Null limits remain
+unbounded, zero excludes that section's content, and positive limits are ceilings.
+
+Stale references return 200 with existing issue/decision metadata; the saved
+document is not repaired. Selection may omit unavailable content in its proposed
+references. Malformed requests use the existing 422 validation. Unreadable,
+blank or invalid stored JSON and invalid catalogues return sanitised 503 errors;
+a blank file is corrupt data, not an empty Current CV document (`{}`). Internal
+paths, provider configuration and exception details are not returned.
+
+Repeat requests are deterministic for unchanged input snapshots. There is no
+transaction across the two JSON stores, revision token or stale-preview protection
+after a response is issued; the response's source snapshot remains the authority
+for rendering that preview. The V3.3.5 frontend below supports read-only review.
+Saving, accepting recommendations, rewriting and export remain outside this endpoint.
+
+Run its isolated tests without accessing real saved data or OpenAI:
+
+```bash
+.venv/bin/python -m pytest -q tests/test_tailoring_preview_api.py
+```
+
+## Tailored CV Preview in the dashboard — V3.3.5
+
+1. Open **Tailor CV → Analyse** and run **Analyse Job** for a job description.
+2. Use **Continue to Match**, then **Generate Tailored CV Preview**. You can also
+   open the Tailor stage and generate there. Generation becomes available after
+   analysis/matching finishes; a successful analysis is still usable if the
+   separate `/match` request failed.
+3. Review the selected CV content, requirement coverage and expandable
+   **Selection explanations & changes** area.
+4. Use **Regenerate Tailored CV Preview** to read the saved stores again, or
+   analyse a different description to generate a preview for another job.
+
+Generation sends the existing analysis to `/tailoring/preview`. It does not call
+`/analyse` again or request generated explanations. Loading disables duplicate
+submissions. A preview error preserves the analysis and allows retrying without
+another extraction. Full Matching Diagnostics remains available separately.
+
+The CV surface shows only proposed work achievements, projects/contributions and
+skill groups, in their returned order. Original role metadata, descriptions,
+labels and bullet text remain unchanged, including spacing and line breaks.
+Education and certifications follow the existing Current CV preview convention
+and use the response's original records. Empty sections are omitted; an entirely
+empty selection has an explicit empty state.
+
+**Retained** means selected content was already in the saved Current CV.
+**Recommended** means selected content came from elsewhere in the bank.
+Neither label describes evidence strength. Previously selected content that is
+**omitted** appears only in the changes area, alongside the supplied reason;
+the UI does not invent a replacement relationship between two records. Other
+unselected bank content and unchanged credentials have their own disclosures.
+Expand the explanations to see original support, required/preferred metadata,
+matched OR options, evidence origins and caveats such as API development without
+demonstrated maintenance. These are existing backend decisions, not JavaScript
+matching or ranking rules.
+
+Coverage shows the preview response's **Experience Bank** totals separately from
+**selected work/projects**. A strong bank requirement can be absent from the
+selection because of limits or trade-offs; it is not relabelled missing from the
+bank. Recorded skill labels and selected education/certification support are
+listed separately within each requirement row. For example, a degree can have
+strong bank support and appear in Education while its work/project status is
+`not_selected`. Counts are descriptive; there is no compatibility percentage.
+
+Warnings report stale references, unavailable destinations, incomplete metadata,
+unattributed skill evidence, related-only bank support and limited selected
+coverage. The response does not identify whether a baseline file was missing or
+empty, so the UI reports that no baseline selections were returned rather than
+guessing. Unresolvable or wrong-parent content is not relocated or replaced with
+invented CV text; the proposed reference structure itself is not changed.
+
+The renderer uses only `source_bank` and recommendation metadata from the same
+preview response, without fetching or mixing in a newer bank. Skill keys resolve
+through the response's original catalogue labels, checked against explicit labels
+in that source snapshot. Unsaved Experience Bank edits and Current CV builder
+drafts are excluded. Switching to My CV still opens the independent
+existing builder; the tailored preview never changes its draft or saves it.
+
+Job-description edits invalidate the preview and require another explicit
+analysis. Request versions ignore outdated analysis, match and preview successes,
+failures and cleanup. Starting a newer analysis clears the old preview; late
+responses cannot replace the new one or unlock its loading button. Requests
+already in flight are not cancelled at the server. Previously rendered matching
+results keep their existing refresh notice while a new analysis is needed.
+
+All source text is inserted using text nodes. Project links are displayed as
+original text, not executable links. The preview does not write to either JSON
+store, browser storage or the console, and offers no edit, accept, apply, save or
+export controls. The backend still has no cross-store transaction or revision
+tokens: displayed content describes the returned snapshot, not later edits.
+
+### Manual verification
+
+Start the app, load your saved bank and Current CV, and use the reviewed backend
+description:
+
+> We are hiring a Software Engineer to develop and maintain backend APIs.
+>
+> Candidates must have experience with Python or Java and relational databases.
+>
+> Experience with AWS or Azure is desirable but not essential.
+>
+> You will collaborate with engineers to design software solutions and deploy applications to cloud infrastructure.
+>
+> A Bachelor's degree in Computer Science or a related field is preferred.
+
+- Confirm the analysis contains seven requirements and the reviewed bank's
+  matching baseline remains **4 strong, 1 related and 2 missing**. Different bank
+  data can produce different results; previews never fix extraction omissions.
+- Generate the preview explicitly. Confirm only `/tailoring/preview` is added to
+  the network requests, with no extra `/analyse` or save requests.
+- Check original Oracle and API wording, role/bullet order, project descriptions,
+  skill headings and exact labels. Compare retained/recommended indicators with
+  the saved baseline; inspect omitted content in the changes area only.
+- Expand evidence details and inspect the maintenance caveat. Confirm cloud
+  deployment and collaborative design are not invented. Check that the degree
+  remains in Education and skills are not presented as practical proof.
+- Compare bank and selected coverage. Restrictive saved tailoring limits may
+  reduce selected support without changing bank-wide matches. This preview does
+  not edit those limits.
+- Try an API failure and retry. Edit the description during a request, then
+  analyse another description and regenerate; stale responses must not reappear.
+- Check empty/stale baseline states and a narrow viewport. Inspect expandable
+  explanations and keyboard access, including the scrollable coverage table.
+- Confirm your saved bank, Current CV and any existing builder draft are unchanged.
+
+Automated tests execute the real dashboard and preview JavaScript against mocked
+DOM/network objects, using an isolated real-API seven-requirement fixture:
+
+```bash
+.venv/bin/python -m pytest -q tests/test_tailoring_frontend.py tests/test_tailoring_preview_api.py tests/test_current_cv_frontend.py
+```
+
+These checks cover request contracts, exact text, selection/coverage presentation,
+errors, races, unsafe text and read-only behaviour. They do not replace visual,
+responsive and assistive-technology checks in a real browser or live extraction
+verification. No real saved data or live OpenAI calls are used in the tests.
+
+## Professional Workspace — V3.4.2
+
+The shell uses the existing vanilla HTML/CSS/JavaScript stack. React was evaluated
+and is not needed for this scoped redesign: feature state is already separated,
+and navigation needs only a small controller. A React migration would introduce
+React/React DOM dependencies and a module/build environment, plus migration of
+imperative record editors and their regression harnesses. No framework, package
+manager, build step or new dependency was added. See the
+[official integration guidance](https://react.dev/learn/add-react-to-an-existing-project)
+for the tooling involved if this is reconsidered later.
+
+The desktop sidebar separates destinations from actions:
+
+- **Tailor CV** returns to the last active Analyse, Match or Tailor stage.
+- **New Analysis** clears only the current job session. It is a dashed action,
+  not another destination or a request to OpenAI.
+- **Experience Bank** opens the existing bank editor.
+- **My CV** opens the existing Current CV builder. Internal names, schemas and
+  Save Current CV behaviour remain unchanged.
+
+The initial view is **Tailor CV → Analyse**. Match and Tailor unlock when analysis
+succeeds. **Continue to Match** waits until the existing matching request finishes.
+Opening Tailor without a generated preview shows its read-only pre-generation
+state; opening it never generates automatically. The Match-stage generation
+action switches to Tailor and delegates to the existing preview handler exactly
+once. Match failures retain the analysis and leave preview generation available.
+
+`static/workspace.js` owns only view/stage availability and presentation. It makes
+no requests and copies no analysis, matching, bank or CV documents. `app.js`
+continues to own analysis/matching and bank editing; `current_cv.js` owns its draft,
+validation, loading and saving; `tailoring_preview.js` owns preview requests and
+snapshot rendering. Feature events notify the shell when analysis, matching and
+preview requests change state. Existing CV save locks also lock the new navigation.
+
+Switching stages never reruns extraction, matching or preview generation. Bank
+and CV drafts remain mounted when hidden. My CV retains its existing bank refresh
+on entry and fetches Current CV only when no draft is loaded; this preserves a
+draft rather than replacing it with saved data. Saving Current CV still refreshes
+the bank before submitting its references. Navigation itself never saves content.
+
+New Analysis asks for confirmation if a description, analysis, pending request or
+preview would be discarded. An empty workspace resets without a prompt. Cancel
+preserves the job session. Confirm clears the source input, rendered analysis,
+matches, diagnostics and preview, then returns focus to the description input.
+Saved bank/CV data and unrelated unsaved management drafts are untouched. There
+is no analysis history or browser-storage persistence.
+
+Resetting advances request versions and releases the discarded analysis's UI
+lock, allowing a fresh request. Late successes, failures and cleanup from the old
+request cannot populate or unlock the new session. Requests already in flight
+are ignored when obsolete rather than cancelled at the provider. Description
+edits invalidate the current preview and later stages until a fresh analysis.
+
+The shell introduces a persistent desktop sidebar, compact location header,
+clear stage navigation, warmer flat surfaces, accessible darker coral `#B94432`,
+consistent control sizing and less prominent borders/shadows. Below 900px the
+sidebar becomes an inline Menu disclosure with `aria-expanded`; selecting a view
+closes it, and Escape returns focus to Menu. Below 680px controls and content stack
+where needed. Navigation uses native buttons, `aria-controls`, selected states,
+an `aria-current="step"` marker and a skip link. Feature renderers remain detailed;
+this is not yet the V3.4.3 requirement/evidence or V3.4.4 document/editor redesign.
+
+Manual browser checks:
+
+1. Start the app and verify the initial Analyse stage, sidebar selection, keyboard
+   focus and disabled-stage explanation.
+2. Analyse the reviewed seven-requirement description. Check Analyse Job calls
+   `/analyse` then `/match` once. Continue to Match and generate the read-only
+   preview; stage switching must not repeat those requests.
+3. Visit both management destinations and return to Tailor CV. Verify the active
+   stage, exact preview text, diagnostics and any unsaved management drafts remain.
+4. Try New Analysis with an empty workspace, a typed description, completed
+   results and an in-flight request. Test both Cancel and confirmation; check
+   management drafts and saved files are unchanged.
+5. Use slow requests to reset and start another analysis. Old responses must not
+   overwrite results or enable the newer request's controls.
+6. At desktop, tablet and 320–390px widths, check sidebar/menu behaviour, all three
+   stages, wrapping, long source text and keyboard access. Confirm no page-wide
+   horizontal overflow; the existing coverage table may scroll within its region.
+7. Save My CV explicitly and check navigation is locked only during the save,
+   then restored. Retrying an error should retain the current draft.
+
+Automated tests execute the real shell and feature scripts with isolated API/DOM
+fixtures. They cover navigation, action confirmation, retained job/CV/bank drafts,
+request counts, save locks, delayed responses, semantic markup and safe rendering.
+Real-browser visual, zoom and assistive-technology checks remain manual.
+
+```bash
+.venv/bin/python -m pytest -q tests/test_tailoring_frontend.py tests/test_current_cv_frontend.py tests/test_frontend_safety.py
+```

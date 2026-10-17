@@ -13,6 +13,7 @@ from app.models import (
     JobDescriptionAnalysis,
     JobDescriptionRequest,
     MatchRequest,
+    TailoringPreviewResponse,
 )
 from app.repositories.json_experience_bank import (
     ExperienceBankRepositoryError,
@@ -20,9 +21,13 @@ from app.repositories.json_experience_bank import (
 )
 from app.repositories.json_current_cv import CurrentCVRepositoryError, JsonCurrentCVRepository
 from app.services.current_cv import validate_current_cv_references
+from app.services.cv_candidates import build_cv_candidates
+from app.services.cv_skills import select_cv_content
 from app.services.llm import LLMServiceError, analyse_job_description_with_llm
 from app.services.matching import match_experience_bank
-from app.services.technical_relationships import TechnicalRelationshipCatalogueError
+from app.services.technical_relationships import (
+    TechnicalRelationshipCatalogueError, load_technical_relationships,
+)
 
 app = FastAPI(title="CV Tailor API", version="0.1.0")
 
@@ -161,3 +166,37 @@ def match_job_against_experience_bank(
             status_code=503,
             detail="The technical relationship catalogue could not be loaded.",
         ) from error
+
+
+@app.post("/tailoring/preview", response_model=TailoringPreviewResponse)
+def preview_tailored_cv(request: MatchRequest) -> TailoringPreviewResponse:
+    """Recommend existing CV content without applying or saving any changes."""
+    try:
+        bank = experience_bank_repository.load()
+    except ExperienceBankRepositoryError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="The experience bank could not be loaded.",
+        ) from error
+    try:
+        current_cv = current_cv_repository.load()
+    except CurrentCVRepositoryError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="The Current CV could not be loaded.",
+        ) from error
+    try:
+        catalogue = load_technical_relationships()
+    except TechnicalRelationshipCatalogueError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="The technical relationship catalogue could not be loaded.",
+        ) from error
+
+    # Share one loaded bank snapshot and catalogue across discovery and matching.
+    index = build_cv_candidates(bank, current_cv)
+    matches = match_experience_bank(bank, request.job_analysis, catalogue=catalogue)
+    selection = select_cv_content(index, matches, catalogue=catalogue)
+    return TailoringPreviewResponse(
+        **selection.model_dump(), matching_result=matches, source_bank=bank,
+    )
