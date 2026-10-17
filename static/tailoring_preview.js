@@ -6,6 +6,7 @@
   const state = find("#tailoring-state");
   const error = find("#tailoring-error");
   const output = find("#tailoring-output");
+  const empty = find("#tailoring-empty");
   let analysis = null;
   let revision = null;
   let requestVersion = 0;
@@ -31,11 +32,13 @@
     panel.hidden = true;
     panel.setAttribute("aria-busy", "false");
     output.hidden = true;
+    empty.hidden = false;
     error.hidden = true;
     state.textContent = "";
     button.disabled = true;
     button.textContent = "Generate Tailored CV Preview";
-    for (const id of ["tailored-cv-content", "tailoring-coverage", "tailoring-decisions", "tailoring-warnings", "tailoring-target"]) find(`#${id}`).replaceChildren();
+    find("#tailoring-coverage-title").textContent = "Requirement coverage";
+    for (const id of ["tailored-cv-content", "tailoring-coverage", "tailoring-decisions", "tailoring-summary", "tailoring-warnings", "tailoring-target"]) find(`#${id}`).replaceChildren();
     window.dispatchEvent(new CustomEvent("tailoring-preview-state", { detail: { pending: false, ready: false } }));
   }
 
@@ -60,13 +63,6 @@
     if (analysis) state.textContent = "Ready to generate a preview from this analysis.";
   });
 
-  function indicator(decision) {
-    if (!decision || credential(decision)) return null;
-    const label = decision.reason_codes.includes("invalid_reference") ? "Unavailable"
-      : decision.selected ? decision.was_in_current_cv ? "Retained" : "Recommended" : "Omitted";
-    return node("span", label, "selection-indicator");
-  }
-
   function context(data) {
     const records = new Map();
     const add = (type, record, parent) => records.set(key(type, record.id), { record, parent });
@@ -80,7 +76,6 @@
     }
     for (const item of data.source_bank.education) add("education", item);
     for (const item of data.source_bank.certifications) add("certification", item);
-    const decisions = new Map(data.decisions.map(item => [key(item.source_type, item.source_id), item]));
     const requirements = new Map();
     for (const row of [...data.matching_result.strong_matches, ...data.matching_result.related_matches, ...data.matching_result.missing_requirements]) {
       if (row.requirement_details) requirements.set(row.requirement_details.id, row.requirement_details);
@@ -95,13 +90,13 @@
     // against the same snapshot's explicit labels without new normalisation rules.
     const skills = new Map(data.decisions.filter(item => item.source_type === "skill" && labels.has(item.original_text))
       .map(item => [item.source_id, item.original_text]));
-    return { records, decisions, requirements, skills };
+    return { records, requirements, skills };
   }
 
   function originalFields(target, record, fields) {
     for (const field of fields) {
       if (record[field] !== null && record[field] !== undefined && record[field] !== "") {
-        target.append(node("p", record[field], "cv-source-text"));
+        target.append(node("p", record[field], `cv-source-text cv-field-${field}`));
       }
     }
   }
@@ -118,8 +113,8 @@
     }
     let displayed = 0;
     for (const config of [
-      { field: "work_experience", title: "Work Experience", type: "work_experience", id: "work_experience_id", children: "achievements", ids: "achievement_ids", childType: "achievement", heading: "role", fields: ["employer", "start_date", "end_date", "summary"] },
-      { field: "projects", title: "Projects", type: "project", id: "project_id", children: "evidence", ids: "contribution_ids", childType: "project_evidence", heading: "name", fields: ["description", "link"] },
+      { field: "work_experience", title: "Work Experience", type: "work_experience", id: "work_experience_id", children: "achievements", ids: "achievement_ids", heading: "role", fields: ["employer", "start_date", "end_date", "summary"] },
+      { field: "projects", title: "Projects", type: "project", id: "project_id", children: "evidence", ids: "contribution_ids", heading: "name", fields: ["description", "link"] },
     ]) {
       const selections = data.proposed_cv[config.field];
       if (!selections.length) continue;
@@ -131,8 +126,6 @@
         const card = node("article");
         card.dataset.tailoredParentId = id;
         card.append(node("h4", source.record[config.heading], "cv-source-text"));
-        const badge = indicator(ctx.decisions.get(key(config.type, id)));
-        if (badge) card.append(badge);
         originalFields(card, source.record, config.fields);
         const list = node("ul");
         for (const childId of selection[config.ids]) {
@@ -141,8 +134,6 @@
           const item = node("li");
           item.dataset.tailoredBulletId = childId;
           item.append(node("span", child.text, "cv-source-text"));
-          const childBadge = indicator(ctx.decisions.get(key(config.childType, childId)));
-          if (childBadge) item.append(childBadge);
           list.append(item);
         }
         card.append(list);
@@ -182,8 +173,6 @@
           const item = node("li");
           item.dataset.tailoredSkillKey = skillKey;
           item.append(node("span", ctx.skills.get(skillKey), "cv-source-text"));
-          const badge = indicator(ctx.decisions.get(key("skill", skillKey)));
-          if (badge) item.append(badge);
           list.append(item);
         }
         if (list.children.length) { card.append(list); area.append(card); displayed += 1; }
@@ -196,71 +185,77 @@
   function renderCoverage(data, ctx) {
     const target = find("#tailoring-coverage");
     target.replaceChildren();
+    find("#tailoring-coverage-title").textContent = `Requirement coverage (${data.coverage.length})`;
     const match = data.matching_result;
     target.append(node("p", `Experience Bank: ${match.strong_matches.length} strong · ${match.related_matches.length} related · ${match.missing_requirements.length} not evidenced.`));
     const count = status => data.coverage.filter(row => row.selected_status === status).length;
     target.append(node("p", `Selected work/projects: ${count("strong")} strong · ${count("related")} related · ${count("not_selected")} not represented.`));
     if (!data.coverage.length) { target.append(node("p", "No job requirements were reported.", "muted")); return; }
-    const wrapper = node("div", undefined, "tailoring-coverage-table");
-    wrapper.setAttribute("tabindex", "0");
-    wrapper.setAttribute("role", "region");
-    wrapper.setAttribute("aria-label", "Requirement coverage comparison");
-    const table = node("table");
-    const head = node("thead");
-    const headings = node("tr");
-    for (const title of ["Requirement", "Bank evidence", "Selected CV"]) {
-      const cell = node("th", title); cell.setAttribute("scope", "col"); headings.append(cell);
-    }
-    head.append(headings); table.append(head);
-    const body = node("tbody");
+    const list = node("ul", undefined, "tailoring-coverage-list");
     for (const row of data.coverage) {
       const requirement = row.requirement_details || ctx.requirements.get(row.requirement_id);
-      const line = node("tr");
+      const line = node("li");
       line.dataset.coverageRequirementId = row.requirement_id;
-      const name = node("th"); name.setAttribute("scope", "row");
-      name.append(node("p", requirement?.text || row.requirement_id, "cv-source-text"), node("p", importance(requirement?.importance), "muted"));
-      const selected = node("td");
-      selected.append(node("p", statuses[row.selected_status] || "Support not reported"));
+      line.append(node("h5", requirement?.text || row.requirement_id, "cv-source-text"), node("p", importance(requirement?.importance), "muted"),
+        node("p", `Bank evidence: ${statuses[row.bank_status] || "Support not reported"}`));
+      const selected = node("div");
+      selected.append(node("p", `Selected work/projects: ${statuses[row.selected_status] || "Support not reported"}`));
       if (row.selected_status !== "not_selected" && !row.meaningful_evidence_ids.length) selected.append(node("p", "Declarations only; practical activity is not established.", "muted"));
       const skillKeys = data.skill_coverage.find(item => item.requirement_id === row.requirement_id)?.selected_skill_keys || [];
       const labels = skillKeys.filter(id => ctx.skills.has(id)).map(id => ctx.skills.get(id));
       if (labels.length) selected.append(node("p", `Recorded skills: ${labels.join(", ")}`, "cv-source-text muted"));
-      const credentials = data.decisions.filter(item => item.selected && credential(item) && item.supported_requirement_ids.includes(row.requirement_id));
+      const credentials = data.decisions.filter(item => item.selected && credential(item)
+        && ctx.records.has(key(item.source_type, item.source_id)) && item.supported_requirement_ids.includes(row.requirement_id));
       credentials.forEach(item => selected.append(node("p", `${types[item.source_type]}: ${item.original_text}`, "cv-source-text muted")));
-      line.append(name, node("td", statuses[row.bank_status] || "Support not reported"), selected);
-      body.append(line);
+      line.append(selected);
+      list.append(line);
     }
-    table.append(body); wrapper.append(table); target.append(wrapper);
+    target.append(list);
   }
 
   function renderDecisions(data, ctx, warnings) {
     const target = find("#tailoring-decisions");
     target.replaceChildren();
+    const summary = find("#tailoring-summary");
+    summary.replaceChildren();
     const groups = [
-      ["Retained from Current CV", item => item.selected && item.was_in_current_cv && !credential(item)],
-      ["Recommended from Experience Bank", item => item.selected && !item.was_in_current_cv && !credential(item)],
-      ["Omitted from Current CV", item => !item.selected && item.was_in_current_cv],
-      ["Other bank content not selected", item => !item.selected && !item.was_in_current_cv],
-      ["Education and certifications unchanged", item => item.selected && credential(item)],
+      ["Retained from Current CV", "retained", item => item.selected && item.was_in_current_cv && !credential(item)],
+      ["Recommended from Experience Bank", "recommended", item => item.selected && !item.was_in_current_cv && !credential(item)],
+      ["Omitted from Current CV", "omitted", item => !item.selected && item.was_in_current_cv],
+      ["Other bank content not selected", "other", item => !item.selected && !item.was_in_current_cv],
+      ["Education and certifications unchanged", "credentials", item => item.selected && credential(item)],
     ];
-    for (const [title, include] of groups) {
+    for (const [title, group, include] of groups) {
       const items = data.decisions.filter(include);
+      if (["retained", "recommended", "omitted"].includes(group)) {
+        const count = node("p");
+        count.dataset.selectionSummary = group;
+        count.append(node("strong", String(items.length)), node("span", group === "recommended" ? "Newly recommended" : group === "retained" ? "Retained" : "Omitted baseline"));
+        summary.append(count);
+      }
       if (!items.length) continue;
-      const list = node("div");
+      const list = node("div", undefined, "tailoring-decision-list");
       for (const item of items) {
         const source = ctx.records.get(key(item.source_type, item.source_id));
         const record = source?.record;
         const parent = source?.parent;
         if (!types[item.source_type]) warnings.push("Some recommendation content has no supported CV destination. It is shown only in the changes area.");
+        const missingCredential = item.selected && credential(item) && !source;
+        if (missingCredential) warnings.push("A selected credential is unavailable in this snapshot. It was not displayed in the CV or counted as a displayed credential in coverage.");
         const label = record?.role || record?.name || parent?.role || parent?.name || types[item.source_type] || "Other content";
-        const card = node("article", undefined, "tailoring-decision");
+        const card = node("details", undefined, "tailoring-decision");
         card.dataset.decisionId = item.source_id;
         card.dataset.decisionType = item.source_type;
-        card.append(node("h4", `${types[item.source_type] || "Content"}: ${label}`, "cv-source-text"));
-        if (item.original_text !== null) card.append(node("p", item.original_text, "cv-source-text"));
-        else card.append(node("p", `Unavailable reference (${item.source_id}).`, "muted"));
-        card.append(node("p", item.recommendation));
-        if (item.group_name || item.previous_group_name) card.append(node("p", `Skill group: ${item.group_name || item.previous_group_name}`, "cv-source-text muted"));
+        const heading = node("summary");
+        heading.append(node("span", label === types[item.source_type] ? label : `${types[item.source_type] || "Content"}: ${label}`, "tailoring-decision-context cv-source-text"),
+          node("span", item.original_text ?? `Unavailable reference (${item.source_id}).`, "tailoring-decision-excerpt cv-source-text"));
+        card.append(heading);
+        const body = node("div", undefined, "tailoring-decision-body");
+        if (item.original_text !== null) body.append(node("p", item.original_text, "cv-source-text"));
+        else body.append(node("p", `Unavailable reference (${item.source_id}).`, "muted"));
+        body.append(node("p", item.recommendation));
+        if (missingCredential) body.append(node("p", "This credential reference is unavailable in the source snapshot; it is not shown in the proposed CV.", "muted"));
+        if (item.group_name || item.previous_group_name) body.append(node("p", `Skill group: ${item.group_name || item.previous_group_name}`, "cv-source-text muted"));
         const requirements = node("ul");
         for (const id of item.supported_requirement_ids) {
           const requirement = ctx.requirements.get(id);
@@ -273,11 +268,15 @@
           }
           requirements.append(entry);
         }
-        card.append(requirements);
-        if (item.bundle_evidence_ids.length) card.append(node("p", "Project support can include its selected contributions; each contribution retains its own evidence.", "muted"));
+        body.append(requirements);
+        if (item.bundle_evidence_ids.length) body.append(node("p", "Project support can include its selected contributions; each contribution retains its own evidence.", "muted"));
+        card.append(body);
         list.append(card);
       }
-      target.append(disclosure(`${title} (${items.length})`, list));
+      const groupArea = disclosure(`${title} (${items.length})`, list);
+      groupArea.className = "tailoring-decision-group";
+      groupArea.dataset.selectionGroup = group;
+      target.append(groupArea);
     }
     if (!target.children.length) target.append(node("p", "No content decisions were reported.", "muted"));
   }
@@ -303,7 +302,7 @@
     target.replaceChildren();
     const unique = [...new Set(warnings)];
     if (unique.length) {
-      const list = node("ul"); unique.forEach(value => list.append(node("li", value))); target.append(list);
+      const list = node("ul"); unique.forEach(value => list.append(node("li", value))); target.append(node("h4", "Notes & limitations"), list);
     }
     target.hidden = !unique.length;
   }
@@ -311,25 +310,35 @@
   button.addEventListener("click", async () => {
     if (!analysis || pending || analysing) return;
     const version = ++requestVersion;
+    const hadPreview = !output.hidden;
     pending = true;
     button.disabled = true;
     panel.setAttribute("aria-busy", "true");
     state.textContent = "Generating tailored CV preview…";
     error.hidden = true;
     output.hidden = true;
+    empty.hidden = true;
     window.dispatchEvent(new CustomEvent("tailoring-preview-state", { detail: { pending: true, ready: false } }));
+    let rendering = false;
     try {
       const data = await request("/tailoring/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job_analysis: analysis }) });
       if (version !== requestVersion) return;
+      rendering = true;
       render(data);
       output.hidden = false;
       state.textContent = "Preview ready. No changes have been saved or applied.";
-      button.textContent = "Regenerate Tailored CV Preview";
+      button.textContent = "Regenerate Preview";
     } catch (failure) {
       if (version !== requestVersion) return;
+      // Only restore a preceding response if rendering has not touched its DOM.
+      const keepPreview = hadPreview && !rendering;
+      output.hidden = !keepPreview;
+      empty.hidden = keepPreview;
       error.textContent = failure.message || "The preview could not be generated. Please try again.";
       error.hidden = false;
-      state.textContent = "Your job analysis is still available. You can retry the preview.";
+      state.textContent = keepPreview
+        ? "Regeneration failed. Showing the previous successful preview for this job analysis; saved content may have changed. Retry to refresh it."
+        : "Your job analysis is still available. You can retry the preview.";
     } finally {
       if (version === requestVersion) {
         pending = false;

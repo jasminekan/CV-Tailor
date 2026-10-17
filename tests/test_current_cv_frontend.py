@@ -21,6 +21,8 @@ from app.repositories.json_experience_bank import JsonExperienceBankRepository
 STATIC = Path(__file__).resolve().parents[1] / "static"
 HARNESS = Path(__file__).with_name("current_cv_frontend_harness.js")
 SCENARIOS = [
+    "polish_compact_rows", "polish_change_references", "polish_reorder_focus", "polish_skill_actions",
+    "editor_disclosures", "editor_focus", "editor_validation_labels",
     "navigation", "parent_dropdowns", "bullet_dropdowns", "duplicates",
     "add_remove_reorder", "round_trip", "missing_placeholders", "replace_broken",
     "failed_cv_load", "failed_bank_load", "failed_save", "structural_error",
@@ -86,16 +88,17 @@ def test_frontend_selection_payload_passes_real_api_and_persistence(tmp_path, mo
 
 def test_bank_evidence_editor_preserves_original_and_explicitly_edited_text(tmp_path):
     source = (STATIC / "app.js").read_text()
-    reader = "function readEvidence(" + source.split("function readEvidence(", 1)[1].split("\nfunction parseLines", 1)[0]
+    reader = "function readEvidence(" + source.split("function readEvidence(", 1)[1].split("\nfunction readCredentials", 1)[0]
     split_values = "function splitValues(" + source.split("function splitValues(", 1)[1].split("\n// Keep each item's metadata", 1)[0]
     run_frontend_scenario(tmp_path, "bank_text_preservation", split_values + reader)
 
 
 def test_bank_editor_preserves_unchanged_education_and_certification_rows(tmp_path):
     source = (STATIC / "app.js").read_text()
-    parser = "function parseLines(" + source.split("function parseLines(", 1)[1].split("\nfunction readBank", 1)[0]
+    parser = "function readCredentials(" + source.split("function readCredentials(", 1)[1].split("\nfunction readBank", 1)[0]
+    config = "const credentialFields =" + source.split("const credentialFields =", 1)[1].split("\nfunction addCredential", 1)[0]
     split_values = "function splitValues(" + source.split("function splitValues(", 1)[1].split("\n// Keep each item's metadata", 1)[0]
-    run_frontend_scenario(tmp_path, "bank_rows_preservation", "const loadedBank = {};\n" + split_values + parser)
+    run_frontend_scenario(tmp_path, "bank_rows_preservation", config + split_values + parser)
 
 
 def test_frontend_skill_catalogue_matches_backend_sources_labels_keys_and_order(tmp_path):

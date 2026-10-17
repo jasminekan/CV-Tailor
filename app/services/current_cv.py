@@ -42,7 +42,7 @@ def validate_current_cv_references(
 ) -> list[CurrentCVReferenceIssue]:
     """Report all bank reference issues; inputs must already pass model validation.
 
-    Neither document is modified. Future GET handlers can return these issues
+    Neither document is modified. GET handlers can return these issues
     alongside the CV; PUT handlers can reject saving when the list is nonempty.
     """
     work_ids = {work.id for work in bank.work_experience}

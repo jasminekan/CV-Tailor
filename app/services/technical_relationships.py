@@ -142,7 +142,7 @@ def load_technical_relationships(
             object_pairs_hook=_unique_json_object,
         )
         return TechnicalRelationshipCatalogue.model_validate(payload)
-    except (OSError, UnicodeError, ValueError) as error:
+    except (OSError, ValueError) as error:
         raise TechnicalRelationshipCatalogueError(
             f"Could not load technical relationship catalogue {catalogue_path}: {error}"
         ) from error

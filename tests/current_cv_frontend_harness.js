@@ -21,7 +21,7 @@ class MockElement {
   set textContent(value) { this._text = String(value); this.children = []; }
   get textContent() { return this._text + this.children.map(child => child.textContent).join(" "); }
   set innerHTML(value) { throw new Error("Unsafe HTML rendering"); }
-  append(...children) { this.children.push(...children); }
+  append(...children) { children.forEach(child => { child.parentElement = this; this.children.push(child); }); }
   replaceChildren(...children) { this.children = []; this._text = ""; this.append(...children); }
   setAttribute(name, value) { this.attributes[name] = String(value); }
   removeAttribute(name) { delete this.attributes[name]; }
@@ -115,7 +115,7 @@ if (scenario === "empty_bank") {
   bankJSON.work_experience = [];
   bankJSON.projects = [];
 }
-if (/^(groups_|skills_|settings_|phase5_|preview_|release_)/.test(scenario)) {
+if (/^(groups_|skills_|settings_|phase5_|preview_|release_|polish_)/.test(scenario)) {
   bankJSON.skills = ["Python", "JavaScript", "C", "C++", "C#", "API\tDevelopment"];
 }
 if (["skills_replace_missing", "skills_remove_missing", "preview_missing"].includes(scenario)) {
@@ -176,7 +176,7 @@ async function choose(root, text, id) {
   await fire(row.children[1], "click");
 }
 async function control(root, text) {
-  const node = all(root).find(node => node.tagName === "button" && node.textContent === text);
+  const node = all(root).find(node => node.tagName === "button" && (node.textContent === text || node.attributes["aria-label"]?.startsWith(`${text} `)));
   assert(node, `Missing control ${text}`);
   await fire(node, "click");
 }
@@ -226,14 +226,14 @@ async function run() {
     case "bullet_dropdowns":
       same(options(pickerRow(card("role-a"), "Add Bullet Point").children[0]), ["", "a3"], "Only unselected bullets from role");
       same(options(pickerRow(card("project-a"), "Add Contribution").children[0]), ["", "p3"], "Only unselected contributions from project");
-      same(options(bullet("a2").children.find(node => node.tagName === "select")), ["", "a2", "a3"], "Replacement excludes sibling selection");
+      same(options(all(bullet("a2")).find(node => node.tagName === "select")), ["", "a2", "a3"], "Replacement excludes sibling selection");
       break;
     case "duplicates": {
       await choose(nodes["#cv-add-work"], "Add Experience", "role-a");
       await choose(nodes["#cv-add-project"], "Add Project", "project-a");
       await choose(card("role-a"), "Add Bullet Point", "a1");
       await choose(card("project-a"), "Add Contribution", "p1");
-      const selected = bullet("a2").children.find(node => node.tagName === "select");
+      const selected = all(bullet("a2")).find(node => node.tagName === "select");
       selected.value = "a1";
       await fire(selected, "change");
       same(parentOrder("#cv-work-list"), ["role-a"], "Duplicate role rejected");
@@ -291,7 +291,7 @@ async function run() {
       await choose(card("deleted-role"), "Replace experience and clear bullets", "role-b");
       same(parentOrder("#cv-work-list"), ["role-b"], "Parent replaced in place");
       same(bulletOrder("role-b"), [], "Explicit replacement clears old bullets");
-      const select = bullet("moved-contribution").children.find(node => node.tagName === "select");
+      const select = all(bullet("moved-contribution")).find(node => node.tagName === "select");
       select.value = "p2";
       await fire(select, "change");
       same(bulletOrder("project-a"), ["p2", "p1"], "Broken bullet replaced in place");
@@ -483,7 +483,7 @@ async function run() {
       await choose(group(1), "Add Skill", "python");
       same(skillOrder(1), [], "Duplicate add rejected");
       await choose(group(1), "Add Skill", "c++");
-      const replacement = skill(1, "c++").children.find(node => node.tagName === "select");
+      const replacement = all(skill(1, "c++")).find(node => node.tagName === "select");
       assert(!options(replacement).includes("python"), "Other group's skill excluded from replacements");
       replacement.value = "python";
       await fire(replacement, "change");
@@ -496,7 +496,7 @@ async function run() {
     case "skills_replace_missing": {
       assert(skill(0, "ghost").textContent.includes("Unavailable skill"), "Missing skill placeholder");
       assert(!nodes["#current-cv-warnings"].hidden, "Missing skill warning");
-      const replacement = skill(0, "ghost").children.find(node => node.tagName === "select");
+      const replacement = all(skill(0, "ghost")).find(node => node.tagName === "select");
       replacement.value = "javascript";
       await fire(replacement, "change");
       same(skillOrder(0), ["javascript", "python"], "Unavailable skill replaced in place");
@@ -695,6 +695,96 @@ async function run() {
       print(`DOCUMENT ${JSON.stringify(lastPut)}`);
       print(`BANK ${JSON.stringify(bankJSON)}`);
       break;
+    case "polish_compact_rows": {
+      for (const id of ["a2", "a1", "p2", "p1"]) {
+        const row = bullet(id);
+        const actions = all(row).find(node => node.className === "cv-item-actions");
+        const change = all(actions).find(node => node.tagName === "details");
+        assert(actions && change.children[0].textContent === "Change" && !change.open, "Compact actions include a closed, labelled Change disclosure");
+        const controls = all(actions).filter(node => node.tagName === "button");
+        same(controls.map(node => node.textContent), ["↑", "↓", "Remove"], "Compact actions replace repetitive long button labels");
+        assert(controls.every(node => node.attributes["aria-label"]), "All compact actions have accessible names");
+        assert(controls[0].attributes["aria-label"].startsWith("Move Up ") && controls[1].attributes["aria-label"].startsWith("Move Down "), "Arrow controls communicate direction and context");
+        assert(controls[2].attributes["aria-label"].includes("bank record is kept"), "Removal is a CV selection action");
+        const original = bankJSON.work_experience.flatMap(record => record.achievements).concat(bankJSON.projects.flatMap(record => record.evidence)).find(item => item.id === id);
+        same(row.children[0].textContent, original.text, "The complete original bullet remains prominent");
+        change.open = true; change.open = false;
+      }
+      assert(nodes["#current-cv-state"].textContent === "Saved" && !requests.some(item => item.method === "PUT"), "Opening/closing Change does not edit or save the CV");
+      break;
+    }
+    case "polish_change_references": {
+      const originalBank = JSON.stringify(bankJSON);
+      for (const [oldId, newId] of [["a2", "a3"], ["p2", "p3"]]) {
+        const select = all(bullet(oldId)).find(node => node.tagName === "select");
+        select.parentElement.open = true;
+        select.value = newId; await fire(select, "change");
+        assert(!bullet(oldId) && bullet(newId), "Change updates the selected reference");
+        assert(document.activeElement.value === newId && document.activeElement.parentElement.open, "Focus follows the rebuilt Change control");
+      }
+      same(bulletOrder("role-a"), ["a3", "a1"], "Work ownership and order preserved");
+      same(bulletOrder("project-a"), ["p3", "p1"], "Project ownership and order preserved");
+      assert(nodes["#current-cv-state"].textContent === "Unsaved changes" && !lastPut, "Changes stay in the independent draft");
+      await submit();
+      same(lastPut.work_experience[0].achievement_ids, ["a3", "a1"], "Explicit save persists the replacement IDs");
+      same(lastPut.projects[0].contribution_ids, ["p3", "p1"], "Contribution IDs use the existing contract");
+      same(JSON.stringify(bankJSON), originalBank, "Changing or saving selections never modifies bank wording or IDs");
+      assert(nodes["#current-cv-state"].textContent === "Saved", "Explicit save restores the saved state");
+      break;
+    }
+    case "polish_reorder_focus": {
+      await control(bullet("a1"), "Move Up");
+      same(bulletOrder("role-a"), ["a1", "a2"], "Compact arrow reorders the same references");
+      assert(document.activeElement.textContent === "↓" && document.activeElement.attributes["aria-label"].startsWith("Move Down "), "Focus follows the moved item to its enabled control");
+      await control(bullet("a1"), "Remove bullet point");
+      assert(document.activeElement === nodes["#cv-work-title"] && !bullet("a1"), "Compact Remove preserves focus recovery");
+      assert(bankJSON.work_experience[0].achievements.some(item => item.id === "a1"), "Removing a selection keeps its source record");
+      break;
+    }
+    case "polish_skill_actions": {
+      await choose(group(0), "Add Skill", "javascript");
+      const row = skill(0, "javascript");
+      const actions = all(row).find(node => node.className === "cv-item-actions");
+      assert(actions && all(actions).some(node => node.textContent === "↑"), "Skills share compact selection controls");
+      await control(row, "Move Up"); same(skillOrder(0), ["javascript", "python"], "Skill reorder preserved");
+      const select = all(skill(0, "javascript")).find(node => node.tagName === "select");
+      select.value = "c#"; await fire(select, "change");
+      assert(document.activeElement.value === "c#", "Skill replacement preserves focus and explicit catalogue identity");
+      await control(skill(0, "c#"), "Remove Skill");
+      same(skillOrder(0), ["python"], "Remove changes only the skill selection");
+      assert(document.activeElement === nodes["#cv-skills-title"] && bankJSON.skills.includes("C#"), "Focus and source data are preserved");
+      break;
+    }
+    case "editor_disclosures": {
+      const choices = all(card("role-a")).filter(node => node.className?.includes("cv-choice"));
+      assert(choices.length && choices.every(node => node.tagName === "details" && !node.open), "Selection lists are collapsed behind native disclosures");
+      const change = all(bullet("a2")).find(node => node.className?.includes("cv-change-choice"));
+      assert(change.children[0].tagName === "summary" && change.children[0].textContent === "Change", "Change is a concise accessible disclosure");
+      const select = all(change).find(node => node.tagName === "select");
+      assert(change.children.some(node => node.tagName === "label" && node.attributes.for === select.id), "A replacement has a visible associated label");
+      assert(all(card("role-a")).find(node => node.textContent === "Remove experience").attributes["aria-label"].includes("bank record is kept"), "Removing a CV selection is distinguished from bank deletion");
+      assert(!requests.some(request => request.method === "PUT"), "Presentation controls do not autosave");
+      break;
+    }
+    case "editor_focus": {
+      await choose(nodes["#cv-add-work"], "Add Experience", "role-b");
+      assert(document.activeElement.textContent === "Developer at Other", "Adding a role focuses its new heading");
+      await control(bullet("a2"), "Remove bullet point");
+      assert(document.activeElement === nodes["#cv-work-title"], "Removing content returns focus to its section heading");
+      const select = all(skill(0, "python")).find(node => node.tagName === "select");
+      // Select the same option: the draft stays unchanged but focus still follows the rebuilt control.
+      await fire(select, "change");
+      assert(document.activeElement.tagName === "select" && document.activeElement.parentElement.open, "Focus recovery reveals the enclosing Change disclosure");
+      break;
+    }
+    case "editor_validation_labels": {
+      const heading = all(group(0)).find(node => node.id === "cv-group-heading-0");
+      const errorId = heading.attributes["aria-describedby"];
+      heading.value = " "; await fire(heading, "input");
+      assert(all(group(0)).find(node => node.id === errorId).textContent.includes("nonblank"), "Group-heading validation is associated with its input");
+      assert(nodes["#save-current-cv"].disabled, "Invalid headings cannot be saved");
+      break;
+    }
     case "bank_text_preservation": {
       const original = "  Original bullet.\r\nSecond line.  ";
       const rows = [
@@ -726,11 +816,14 @@ async function run() {
         ["certifications", ["name", "issuer", "year", "skills"], { id: "cert-1", name: " Certificate | With Separator ", issuer: " Issuer ", year: null, skills: ["AWS (EC2, S3)"] }],
       ];
       for (const [id, fields, record] of fixtures) {
-        loadedBank[id] = [copy(record)];
-        nodes[`#${id}`] = new MockElement();
-        nodes[`#${id}`].value = fields.map(field => Array.isArray(record[field]) ? record[field].join(", ") : record[field] || "").join(" | ");
-        same(parseLines(id, fields), [record], "Unrelated saves preserve every field and stable ID");
-        same(loadedBank[id], [record], "Reading rows never mutates originals");
+        const values = Object.fromEntries(fields.map(field => [field, { value: Array.isArray(record[field]) ? record[field].join(", ") : record[field] ?? "" }]));
+        const row = { original: copy(record), querySelector: selector => values[selector.match(/data-field="([^"]+)"/)[1]] };
+        nodes[`#${id}`] = { querySelectorAll: () => [row] };
+        same(readCredentials(id), [record], "Unrelated saves preserve every field and stable ID");
+        same(row.original, record, "Reading rows never mutates originals");
+        values[fields[0]].value = "Renamed | credential";
+        same(readCredentials(id)[0].id, record.id, "Renaming a credential preserves its ID without title matching");
+        same(readCredentials(id)[0][fields[0]], "Renamed | credential", "Pipe characters are ordinary record text");
       }
       break;
     }

@@ -5,14 +5,12 @@ from pathlib import Path
 STATIC = Path(__file__).resolve().parents[1] / "static"
 
 
-def test_html_templates_do_not_interpolate_bank_values():
+def test_bank_editor_renders_labels_and_values_without_html_injection():
     script = (STATIC / "app.js").read_text()
-    templates = re.findall(r"\.innerHTML\s*=\s*`([^`]*)`", script)
-    assert len(templates) == 2
-    assert all("${" not in template for template in templates)
-    assert len(re.findall(r"\.innerHTML\s*=", script)) == len(templates)
-    assert '.value = work[field] || ""' in script
-    assert '.value = project[field] || ""' in script
+    for unsafe in [".innerHTML", ".outerHTML", "insertAdjacentHTML", "document.write"]:
+        assert unsafe not in script
+    assert 'input.value = value ?? ""' in script
+    assert 'label.setAttribute("for", input.id)' in script
 
 
 def test_save_is_disabled_and_guarded_until_successful_load():
