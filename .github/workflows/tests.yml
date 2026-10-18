@@ -1,0 +1,37 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPERIENCE_BANK_PATH: ${{ runner.temp }}/jobmatch-ci/experience_bank.json
+      CURRENT_CV_PATH: ${{ runner.temp }}/jobmatch-ci/current_cv.json
+      OPENAI_API_KEY: ""
+      OPENAI_BASE_URL: http://127.0.0.1:9/v1
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Run full test suite
+        run: |
+          node --version
+          python -m pytest -q
