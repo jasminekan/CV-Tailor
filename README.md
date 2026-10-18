@@ -1,89 +1,58 @@
 # JobMatch CV Tailor
 
-JobMatch CV Tailor is a locally runnable application for comparing job requirements
-with recorded experience and choosing relevant CV content. It helps keep a focused
-CV grounded in evidence: OpenAI extracts the job requirements, then deterministic
-Python services match and select content from a structured Experience Bank.
-Original achievements, contributions and skill labels retain their wording.
+JobMatch is a local CV tailoring application that analyses job descriptions,
+matches requirements against a structured Experience Bank and recommends relevant
+existing CV content. OpenAI extracts the requirements; deterministic Python
+services match and select recorded evidence, preserving its original wording
+rather than inventing qualifications or rewriting achievements.
 
-## What it does
+## Key features
 
-- **Experience Bank:** maintain work roles, achievements, projects, contributions,
-  skills, education, certifications and additional evidence.
-- **My CV:** build an ordered baseline CV by selecting existing records, organising
-  skills into groups and setting optional tailoring limits.
-- **Job analysis:** extract structured requirements with source quotations,
-  required/preferred importance and grouped alternatives.
-- **Evidence matching:** review strong, related and missing requirements, ranked
-  evidence and explanations tied to source records.
-- **Tailored preview:** review recommended content, omissions and requirement
-  coverage without changing the saved bank or baseline CV.
+- **Structured job analysis:** source quotations, required/preferred importance
+  and grouped alternatives such as Python OR Java.
+- **Deterministic matching:** strong, related and missing classifications, with
+  technical relationships and safeguards against overstating practical experience.
+- **Experience Bank and My CV:** manage recorded experience and an ordered baseline
+  CV, with explicit saves and configurable tailoring limits.
+- **Evidence-based selection:** recommend relevant achievements, projects and
+  explicitly recorded skills, with source references and explanations.
+- **Read-only tailored preview:** review selections, omissions and requirement
+  coverage without changing saved content.
 
-## Workflow
+## Tech stack
 
-**Job description → structured requirement extraction → Experience Bank matching
-→ evidence-based content selection → read-only tailored preview**
-
-Start by adding evidence to **Experience Bank** and selecting your baseline work
-roles in **My CV**. In **Tailor CV**, use the Analyse, Match and Tailor stages to
-review a job and generate a preview. Navigation preserves drafts and the current
-job session; saving management changes is explicit.
-
-Only `/analyse` sends the supplied job description to OpenAI. Matching and preview
-selection run locally against saved data. Structured output constrains the model's
-response; Python verifies source quotations, assigns analysis-local requirement
-IDs and derives the display lists. Matching and selection are deterministic for
-unchanged inputs and catalogue data. Live extraction can vary and needs review.
+**Backend:** Python, FastAPI, Pydantic, OpenAI API (Python SDK) and Uvicorn.
+**Frontend:** JavaScript, HTML and CSS. **Storage:** local JSON files.
+**Testing and CI:** pytest, HTTPX, JavaScript behaviour harnesses and GitHub Actions.
+No database or frontend build step is required.
 
 ## Screenshots
 
-Local application shown with fictional fixture data and controlled analysis
-responses.
+The local application shown with fictional data and controlled analysis responses.
 
 | Analyse requirements | Match evidence | Review the tailored preview |
 | --- | --- | --- |
 | ![Analyse stage with grouped job requirements](docs/images/analyse.png) | ![Match stage with evidence and requirement details](docs/images/match.png) | ![Read-only tailored CV and selection explanations](docs/images/tailor.png) |
 
-## Stack and architecture
-
-**Backend:** Python, FastAPI, Pydantic, OpenAI Python SDK and Uvicorn.
-**Frontend:** HTML, CSS and vanilla JavaScript.
-**Storage:** two local JSON documents. **Tests:** pytest, HTTPX and JavaScript
-behaviour harnesses. No database or frontend build step is required.
-
-```text
-app/
-  main.py                 HTTP routes and service orchestration
-  models.py               Request, response and saved-document validation
-  services/               Extraction, matching, provenance and CV selection
-  repositories/           Experience Bank and Current CV JSON persistence
-  data/                   Curated technical relationship catalogue
-static/                   Browser workspace and editors
-tests/                    API, service, persistence and frontend tests
-examples/                 Fictional Experience Bank
-evaluations/extraction/   Isolated extraction evaluation harness
-```
-
-Extraction, requirement preparation, matching, candidate discovery and content
-selection have separate responsibilities. CV selections store stable record IDs
-and skill keys rather than copied bullet text. Preview responses include the
-source snapshot used for selection, so the browser can display the original
-wording with its provenance. See the [architecture and API reference](docs/architecture.md).
-
 ## Run locally
 
-Use Python 3.11 or newer. Run commands from the repository root:
+Use Python 3.11 or newer and Git. From a terminal:
 
 ```bash
+git clone https://github.com/jasminekan/CV-Tailor.git
+cd CV-Tailor
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-On Windows PowerShell, activate with `.\.venv\Scripts\Activate.ps1`.
+On Windows PowerShell, use `python` instead of `python3` and activate with
+`.\.venv\Scripts\Activate.ps1` instead of `source`.
 
-If you do not already have a `.env`, copy `.env.example` to `.env`. Set your own
-`OPENAI_API_KEY` to enable job analysis; never commit a configured `.env`.
+Copy `.env.example` to `.env` if you do not already have one. Set
+`OPENAI_API_KEY=your-openai-api-key` in that local file to enable live job analysis.
+Matching, preview selection and the editors do not need a key. Never commit a
+configured `.env` or personal JSON stores.
 
 | Variable | Default | Read from |
 | --- | --- | --- |
@@ -92,84 +61,88 @@ If you do not already have a `.env`, copy `.env.example` to `.env`. Set your own
 | `EXPERIENCE_BANK_PATH` | `data/experience_bank.json` | Process environment only |
 | `CURRENT_CV_PATH` | `data/current_cv.json` | Process environment only |
 
-Default data paths are relative to the repository root. Export custom store paths
-before starting the server; placing them only in `.env` does not configure them.
-Keep both paths and their `.tmp` save paths distinct. Use the ignored `data/`
-directory or a location outside the checkout for personal stores; arbitrary
-custom filenames are not automatically ignored by Git.
+Default stores live under the repository root and start empty when absent;
+explicit saves create the files. Keep personal stores in ignored `data/` or outside
+the checkout. Export custom paths before starting the server; putting them only
+in `.env` does not configure them. Store paths and their `.tmp` save paths must
+be distinct. A [fictional example bank](examples/experience_bank.example.json)
+illustrates the data format.
+
+Start the application from the repository root:
 
 ```bash
-python -m uvicorn app.main:app --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Open [the application](http://127.0.0.1:8000/) or the
+Open [JobMatch](http://127.0.0.1:8000/) or the
 [interactive API documentation](http://127.0.0.1:8000/docs).
-The schema is available at `/openapi.json` and `/health` returns `{"status":"ok"}`.
-Missing stores load as empty documents; an explicit save creates the directory
-and JSON file. The editors, matching API and preview API work without an OpenAI
-key. The browser's job-analysis step requires one.
+Press **Control-C** in Terminal to stop the server; use `--reload` only for development.
 
-### Try fictional data
+Add records in **Experience Bank** and choose your baseline roles and content in
+**My CV**. Then use **Tailor CV → Analyse → Match → Tailor** to review a job and
+generate recommendations. Navigation preserves drafts; saving is explicit.
 
-[The example bank](examples/experience_bank.example.json) contains fictional
-records. To try it without replacing a personal bank, start a separate server
-session with these store paths (stop any existing server on port 8000 first):
+### macOS launcher
 
-```bash
-export EXPERIENCE_BANK_PATH="$PWD/data/example_bank.json"
-export CURRENT_CV_PATH="$PWD/data/example_current_cv.json"
-python -m uvicorn app.main:app --reload
-```
+After initial setup, double-click [JobMatch.command](JobMatch.command) in Finder.
+It uses this checkout's `.venv`, waits for JobMatch on port 8000 and opens your
+default browser. Keep its Terminal window open and press **Control-C** there to
+stop it. Closing the browser does not stop the server; VS Code is not needed.
 
-In another terminal, from the repository root:
+The launcher reuses an existing JobMatch instance without starting another server;
+stop that instance in its original Terminal window. It leaves an unrecognised
+service on port 8000 alone and uses the configuration rules above.
 
-```bash
-curl -X PUT http://127.0.0.1:8000/experience-bank \
-  -H 'Content-Type: application/json' \
-  --data-binary @examples/experience_bank.example.json
-```
+If executable permission is missing, run `chmod +x JobMatch.command` once from the
+project folder. If macOS blocks a trusted copy, use **System Settings → Privacy &
+Security → Open Anyway** after the blocked attempt; see
+[Apple's opening guidance](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
 
-`PUT` replaces the entire configured bank. Confirm the server uses the example
-paths before importing. Use **My CV** to select baseline roles and bullets.
-The [API reference](docs/architecture.md#api) includes a fictional matching request
-that works without calling OpenAI.
-
-## Tests
+## Testing
 
 ```bash
 python -m pytest -q
-git diff --check
 ```
 
-The suite uses fictional fixtures, temporary stores and mocked provider responses;
-it requires neither credentials nor live OpenAI requests. It covers validation,
-matching semantics, evidence provenance, selection policies, persistence, frontend
-state, stale responses and read-only previews.
+Tests use fictional fixtures, temporary stores and mocked OpenAI responses;
+no API key or live provider requests are needed. Coverage includes validation,
+matching, provenance, selection, persistence and frontend state safeguards.
+JavaScript tests require Node.js or JavaScriptCore (`jsc`); they skip if neither
+is available. DOM/network mocks complement real-browser checks.
 
-JavaScript behaviour tests run with Node.js or JavaScriptCore (`jsc`, including
-the macOS system runtime where available). Those tests skip if neither runtime is
-installed. Their DOM/network mocks complement manual browser checks; they do not
-verify layout or assistive-technology behaviour.
+[GitHub Actions](.github/workflows/tests.yml) runs the full suite on pushes to
+`main` and pull requests targeting `main`, using Ubuntu, Python 3.12 and Node 24.
+It installs `requirements.txt`, uses temporary stores and no OpenAI credentials,
+and points the provider URL at localhost. Results appear in **Actions** and PR
+checks; the workflow does not deploy or publish the application.
 
-The [extraction evaluation harness](evaluations/extraction/README.md) has an offline
-dry run for inspecting its synthetic fixtures and comparison plan. Live evaluation
-is separate, opt-in and uses OpenAI requests.
+The separate [extraction evaluation harness](evaluations/extraction/README.md)
+compares prompts and models against authored expectations. Live runs are opt-in;
+mocked tests do not establish live extraction quality.
 
-## Current limitations
+## Technical approach
 
-- The application is intended for local, single-user use. It has no authentication,
-  multi-user isolation or coordinated concurrent writes across its JSON stores.
-- Extraction can omit or misinterpret requirements. Quotation validation checks
-  lexical provenance, not the correctness or completeness of an interpretation.
-- Matching uses curated relationships and conservative phrase/activity rules.
-  A missing match means no recognised evidence was found; it does not establish
-  that someone lacks the experience. Scores describe evidence coverage, not a
-  hiring prediction or overall compatibility percentage.
-- Tailoring is a greedy selection process with configurable ceilings. It keeps
-  baseline work roles, can recommend other bank projects and explicit skills,
-  and leaves education/certifications in bank order. Human review remains useful.
-- Tailored previews are read-only. There is no automatic application of
-  recommendations, generated CV prose or downloadable PDF/DOCX export.
-- Job sessions and unsaved drafts live in memory. Refreshing the page loses them;
-  saved bank/CV changes require an explicit save. A preview describes its returned
-  snapshot and does not automatically follow later saved edits.
+**Job description → structured requirement extraction → deterministic evidence
+matching → CV content selection → read-only preview**
+
+Only job analysis sends the supplied description to OpenAI. Python validates source
+quotations and derives display fields from one structured representation. Matching
+and selection run locally and deterministically for unchanged inputs and catalogue
+data. Original evidence wording, stable record IDs and provenance connect each
+recommendation to the Experience Bank.
+
+See the [architecture and API reference](docs/architecture.md) for requirement
+compatibility, relationship rules, activity safeguards and selection policies.
+
+## Limitations
+
+- Local single-user application, with no authentication, multi-user isolation or
+  cloud deployment. JSON stores do not coordinate concurrent writes.
+- Live job analysis requires an OpenAI API key and can omit or misinterpret
+  requirements. Extraction and recommendations need human review.
+- Missing evidence means no recognised support was found, not that a candidate
+  lacks the experience. Scores are not an overall job compatibility percentage.
+- Tailored previews are read-only recommendations: they are not automatically
+  saved, rewritten or exported as downloadable CVs.
+- Job sessions and unsaved drafts are held in memory and lost on refresh. Previews
+  reflect the returned saved-data snapshot, excluding unsaved management edits.
