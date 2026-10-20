@@ -1,30 +1,21 @@
 # JobMatch CV Tailor
 
-JobMatch is a local CV tailoring application that analyses job descriptions,
-matches requirements against a structured Experience Bank and recommends relevant
-existing CV content. OpenAI extracts the requirements; deterministic Python
-services match and select recorded evidence, preserving its original wording
-rather than inventing qualifications or rewriting achievements.
+JobMatch is a local CV tailoring application that analyses job descriptions and recommends relevant content from a structured Experience Bank and saved CV. OpenAI extracts job requirements, while deterministic Python services match and select existing evidence. Recommendations retain the original wording rather than inventing qualifications or rewriting achievements.
 
 ## Key features
 
-- **Structured job analysis:** source quotations, required/preferred importance
-  and grouped alternatives such as Python OR Java.
-- **Deterministic matching:** strong, related and missing classifications, with
-  technical relationships and safeguards against overstating practical experience.
-- **Experience Bank and My CV:** manage recorded experience and an ordered baseline
-  CV, with explicit saves and configurable tailoring limits.
-- **Evidence-based selection:** recommend relevant achievements, projects and
-  explicitly recorded skills, with source references and explanations.
-- **Read-only tailored preview:** review selections, omissions and requirement
-  coverage without changing saved content.
+- **Structured job analysis:** Extracts requirements with source quotations, required/preferred importance and grouped alternatives (e.g. Python OR Java).
+- **Deterministic matching:** Classifies recorded evidence as strong, related or missing, using technical relationships and safeguards against overstating experience.
+- **Experience Bank and My CV:** Manage recorded experience and an ordered baseline CV, with explicit saves and configurable tailoring limits.
+- **Evidence-based selection:** Recommends existing achievements, projects and recorded skills, with explanations and references to the source evidence.
+- **Read-only tailored preview:** Review selected and omitted content and requirement coverage without changing saved records.
 
 ## Tech stack
 
 **Backend:** Python, FastAPI, Pydantic, OpenAI API (Python SDK) and Uvicorn.
-**Frontend:** JavaScript, HTML and CSS. **Storage:** local JSON files.
-**Testing and CI:** pytest, HTTPX, JavaScript behaviour harnesses and GitHub Actions.
-No database or frontend build step is required.
+**Frontend:** JavaScript, HTML and CSS. 
+**Storage:** local JSON files.
+**Testing and CI:** pytest, HTTPX, JavaScript behaviour tests, GitHub Actions
 
 ## Screenshots
 
@@ -36,7 +27,9 @@ The local application shown with fictional data and controlled analysis response
 
 ## Run locally
 
-Use Python 3.11 or newer and Git. From a terminal:
+Requirements: Python 3.11 or newer and Git.
+
+Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/jasminekan/CV-Tailor.git
